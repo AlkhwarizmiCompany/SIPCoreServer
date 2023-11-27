@@ -11,6 +11,7 @@ using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorcery.Sys;
 using SIPSorceryMedia.Abstractions;
+using Windows.System;
 
 namespace SIPServer
 {
@@ -30,13 +31,29 @@ namespace SIPServer
         }
     }
 
+    struct SIPAcceptedCallsCall
+    {
+        public SIPUserAgent UA;
+        public SIPServerUserAgent UAS;
+        public string User;
+
+        public SIPAcceptedCallsCall(SIPUserAgent ua, SIPServerUserAgent uas, string user)
+        {
+            UA = ua;
+            UAS = uas;
+            User = user;
+        }
+    }
+
     internal class Server
     {
         private static SIPTransport _sipTransport;
         private static int SIP_LISTEN_PORT = 5060;
         private static Microsoft.Extensions.Logging.ILogger Log = NullLogger.Instance;
-        private static ConcurrentDictionary<string, SIPUserAgent> _calls = new ConcurrentDictionary<string, SIPUserAgent>();
-        private static ConcurrentDictionary<string, SIPRegisterAccount> registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
+
+        private static ConcurrentDictionary<string, SIPRegisterAccount> Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
+        private static ConcurrentDictionary<string, SIPAcceptedCallsCall> AcceptedCalls = new ConcurrentDictionary<string, SIPAcceptedCallsCall>();
+        private static ConcurrentDictionary<string, SIPUserAgent> ActiveCalls = new ConcurrentDictionary<string, SIPUserAgent>();
 
         public Server()
         {
@@ -52,10 +69,35 @@ namespace SIPServer
 
         }
 
+        public async Task AnswerCall(string user)
+        {
+            SIPAcceptedCallsCall call;
+
+            if (!AcceptedCalls.TryGetValue(user, out call))
+                return;
+
+ 
+            var rtpSession = CreateRtpSession(call.UA, call.User);
+            await call.UA.Answer(call.UAS, rtpSession);
+
+            if (call.UA.IsCallActive)
+            {
+                await rtpSession.Start();
+                ActiveCalls.TryAdd(call.UA.Dialogue.CallId, call.UA);
+            }
+        }
+
         private static async Task OnRequest(SIPEndPoint localSIPEndPoint, SIPEndPoint remoteEndPoint, SIPRequest sipRequest)
         {
             try
             {
+                SIPRegisterAccount user;
+
+                user.Username = sipRequest.Header.From.FromURI.User;
+                user.Password = "xxx";
+                user.Expiry = 1;
+                user.Domain = "xyz";
+
                 if (sipRequest.Header.From != null &&
                 sipRequest.Header.From.FromTag != null &&
                 sipRequest.Header.To != null &&
@@ -69,30 +111,10 @@ namespace SIPServer
 
                     SIPUserAgent ua = new SIPUserAgent(_sipTransport, null);
                     ua.OnCallHungup += OnHangup;
-                    //ua.ServerCallCancelled += (uas) => Log.LogDebug("Incoming call cancelled by remote party.");
-                    //ua.OnDtmfTone += (key, duration) => OnDtmfTone(ua, key, duration);
-                    //ua.OnRtpEvent += (evt, hdr) => Log.LogDebug($"rtp event {evt.EventID}, duration {evt.Duration}, end of event {evt.EndOfEvent}, timestamp {hdr.Timestamp}, marker {hdr.MarkerBit}.");
-                    ////ua.OnTransactionTraceMessage += (tx, msg) => Log.LogDebug($"uas tx {tx.TransactionId}: {msg}");
-                    //ua.ServerCallRingTimeout += (uas) =>
-                    //{
-                    //    Log.LogWarning($"Incoming call timed out in {uas.ClientTransaction.TransactionState} state waiting for client ACK, terminating.");
-                    //    ua.Hangup();
-                    //};
-
+                  
                     var uas = ua.AcceptCall(sipRequest);
-                    var rtpSession = CreateRtpSession(ua, sipRequest.URI.User);
 
-                    // Insert a brief delay to allow testing of the "Ringing" progress response.
-                    // Without the delay the call gets answered before it can be sent.
-                    await Task.Delay(500);
-
-                    await ua.Answer(uas, rtpSession);
-
-                    if (ua.IsCallActive)
-                    {
-                        await rtpSession.Start();
-                        _calls.TryAdd(ua.Dialogue.CallId, ua);
-                    }
+                    AcceptedCalls.TryAdd($"{user.Username}@{user.Domain}", new SIPAcceptedCallsCall(ua, uas, sipRequest.URI.User));
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.BYE)
                 {
@@ -106,19 +128,8 @@ namespace SIPServer
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.OPTIONS || sipRequest.Method == SIPMethodsEnum.REGISTER)
                 {
-                    SIPRegisterAccount user;
 
-                    user.Username = sipRequest.Header.From.FromURI.User;
-                    user.Password = "xxx";
-                    user.Expiry = 1;
-                    user.Domain = "xyz";
-
-                    //string username = sipRequest.Header.From.FromURI.User;
-
-                    //// Extract the received password hash from the SIP request (for digest authentication)
-                    //string receivedPasswordHash = sipRequest.Header.AuthenticationHeaders[0].ToString();
-
-                    registrations.TryAdd($"{user.Username}@{user.Domain}", user);
+                    Registrations.TryAdd($"{user.Username}@{user.Domain}", user);
 
                     SIPResponse optionsResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.Ok, null);
                     await _sipTransport.SendResponseAsync(optionsResponse);
@@ -207,9 +218,9 @@ namespace SIPServer
             if (dialogue != null)
             {
                 string callID = dialogue.CallId;
-                if (_calls.ContainsKey(callID))
+                if (ActiveCalls.ContainsKey(callID))
                 {
-                    if (_calls.TryRemove(callID, out var ua))
+                    if (ActiveCalls.TryRemove(callID, out var ua))
                     {
                         // This app only uses each SIP user agent once so here the agent is 
                         // explicitly closed to prevent is responding to any new SIP requests.
