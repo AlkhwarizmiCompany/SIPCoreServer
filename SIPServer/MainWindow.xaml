@@ -5,6 +5,4 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SIPServer"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Button Content="Button" HorizontalAlignment="Left" Margin="137,157,0,0" VerticalAlignment="Top" Click="Button_Click"/>
-</Window>
+        Title="MainWindow" Height="450" Width="800"/>
