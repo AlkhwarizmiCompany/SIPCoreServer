@@ -244,7 +244,7 @@ namespace SIPServer
                     }
                     else
                     {
-                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]); // PCMU
                         //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
                         //_waveFile.Write(pcmSample, 0, 2);
                     }
