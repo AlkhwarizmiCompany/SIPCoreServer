@@ -12,6 +12,9 @@ using SIPSorcery.SIP.App;
 using SIPSorcery.Sys;
 using SIPSorceryMedia.Abstractions;
 using Windows.System;
+using Windows.Devices.Radios;
+using NAudio.Wave;
+using System.IO;
 
 namespace SIPServer
 {
@@ -50,15 +53,16 @@ namespace SIPServer
         private static SIPTransport _sipTransport;
         private static int SIP_LISTEN_PORT = 5060;
         private static Microsoft.Extensions.Logging.ILogger Log = NullLogger.Instance;
-        private static ConcurrentDictionary<string, SIPUserAgent> _calls = new ConcurrentDictionary<string, SIPUserAgent>();
-        private static ConcurrentDictionary<string, SIPRegisterAccount> registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
         private static Action<string> _appendToLog;
+        private static WaveFileWriter _waveFile;
+        private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
+
+        private static IWavePlayer waveOutDevice;
 
         private static ConcurrentDictionary<string, SIPRegisterAccount> Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
         private static ConcurrentDictionary<string, SIPAcceptedCallsCall> AcceptedCalls = new ConcurrentDictionary<string, SIPAcceptedCallsCall>();
         private static ConcurrentDictionary<string, SIPUserAgent> ActiveCalls = new ConcurrentDictionary<string, SIPUserAgent>();
 
-        public Server()
         public Server(Action<string> appendToLog)
         {
             _appendToLog = appendToLog; // Store the logging action
@@ -70,6 +74,10 @@ namespace SIPServer
             _sipTransport.EnableTraceLogs();
 
             _sipTransport.SIPTransportRequestReceived += OnRequest;
+
+            _waveFile = new WaveFileWriter("G:\\src\\SIP\\SIPServer\\SIPServer\\output.mp3", _waveFormat);
+            waveOutDevice = new WaveOutEvent();
+
 
             Log = AddConsoleLogger();
 
@@ -113,7 +121,7 @@ namespace SIPServer
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.INVITE)
                 {
-                    Log.LogInformation($"Incoming call request: {localSIPEndPoint}<-{remoteEndPoint} {sipRequest.URI}.");
+                    _appendToLog?.Invoke($"Incoming call request: {localSIPEndPoint}<-{remoteEndPoint} {sipRequest.URI}.");
 
                     SIPUserAgent ua = new SIPUserAgent(_sipTransport, null);
                     ua.OnCallHungup += OnHangup;
@@ -192,6 +200,23 @@ namespace SIPServer
             return rtpAudioSession;
         }
 
+        private static  void PlaySound(byte[] pcmSample)
+        {
+            using (var stream = new MemoryStream(pcmSample))
+            {
+                stream.Position = 0;
+
+                // Create a WaveChannel32 to ensure the audio is in the correct format.
+                var waveChannel = new WaveChannel32(new WaveFileReader(stream));
+
+                // Initialize the WaveOutDevice with the WaveChannel32.
+                waveOutDevice.Init(waveChannel);
+
+                // Start playing the audio.
+                waveOutDevice.Play();
+            }
+                
+        }
 
         /// <summary>
         /// Event handler for receiving RTP packets.
@@ -199,9 +224,41 @@ namespace SIPServer
         /// <param name="ua">The SIP user agent associated with the RTP session.</param>
         /// <param name="type">The media type of the RTP packet (audio or video).</param>
         /// <param name="rtpPacket">The RTP packet received from the remote party.</param>
-        private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum type, RTPPacket rtpPacket)
+        private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
-            // The raw audio data is available in rtpPacket.Payload.
+            if (mediaType == SDPMediaTypesEnum.audio)
+            {
+                //_appendToLog?.Invoke($"OnRtpPacketReceived");
+
+                var sample = rtpPacket.Payload;
+
+                for (int index = 0; index < sample.Length; index++)
+                {
+                    short pcm;
+
+                    if (rtpPacket.Header.PayloadType == (int)SDPWellKnownMediaFormatsEnum.PCMA)
+                    {
+                        pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
+                        //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        //_waveFile.Write(pcmSample, 0, 2);
+                    }
+                    else
+                    {
+                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                        //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        //_waveFile.Write(pcmSample, 0, 2);
+                    }
+
+                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                    _waveFile.Write(pcmSample, 0, 2);
+
+                    //PlaySound(pcmSample);
+                }
+
+
+
+
+            }
         }
 
         /// <summary>
@@ -223,6 +280,15 @@ namespace SIPServer
         /// <param name="dialogue">The dialogue that was hungup.</param>
         private static void OnHangup(SIPDialogue dialogue)
         {
+            _waveFile?.Close();
+
+            if (waveOutDevice != null)
+            {
+                waveOutDevice.Stop();
+                waveOutDevice.Dispose();
+                waveOutDevice = null;
+            }
+
             if (dialogue != null)
             {
                 string callID = dialogue.CallId;
