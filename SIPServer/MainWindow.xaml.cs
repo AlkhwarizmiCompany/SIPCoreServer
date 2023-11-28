@@ -28,9 +28,14 @@ namespace SIPServer
 
             InitializeComponent();
 
-            Server server = new Server();
-
+            Server server = new Server(AppendToLog);
         }
-
+        private void AppendToLog(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                EventsInfoTextBox.AppendText(message + Environment.NewLine);
+            });
+        }
     }
 }

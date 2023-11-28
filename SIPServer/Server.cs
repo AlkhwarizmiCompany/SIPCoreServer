@@ -50,13 +50,19 @@ namespace SIPServer
         private static SIPTransport _sipTransport;
         private static int SIP_LISTEN_PORT = 5060;
         private static Microsoft.Extensions.Logging.ILogger Log = NullLogger.Instance;
+        private static ConcurrentDictionary<string, SIPUserAgent> _calls = new ConcurrentDictionary<string, SIPUserAgent>();
+        private static ConcurrentDictionary<string, SIPRegisterAccount> registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
+        private static Action<string> _appendToLog;
 
         private static ConcurrentDictionary<string, SIPRegisterAccount> Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
         private static ConcurrentDictionary<string, SIPAcceptedCallsCall> AcceptedCalls = new ConcurrentDictionary<string, SIPAcceptedCallsCall>();
         private static ConcurrentDictionary<string, SIPUserAgent> ActiveCalls = new ConcurrentDictionary<string, SIPUserAgent>();
 
         public Server()
+        public Server(Action<string> appendToLog)
         {
+            _appendToLog = appendToLog; // Store the logging action
+
             _sipTransport = new SIPTransport();
             _sipTransport.AddSIPChannel(new SIPUDPChannel(new IPEndPoint(IPAddress.Any, SIP_LISTEN_PORT)));
 
@@ -133,6 +139,8 @@ namespace SIPServer
 
                     SIPResponse optionsResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.Ok, null);
                     await _sipTransport.SendResponseAsync(optionsResponse);
+                    _appendToLog?.Invoke($"Registration received: {user.Username}@{user.Domain}");
+
                 }
             }
             catch (Exception reqExcp)
