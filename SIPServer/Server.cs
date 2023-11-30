@@ -222,13 +222,13 @@ namespace SIPServer
 
         }
 
-        /// <summary>
-        /// Event handler for receiving RTP packets.
-        /// </summary>
-        /// <param name="ua">The SIP user agent associated with the RTP session.</param>
-        /// <param name="type">The media type of the RTP packet (audio or video).</param>
-        /// <param name="rtpPacket">The RTP packet received from the remote party.</param>
-        private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
+/// <summary>
+/// Event handler for receiving RTP packets.
+/// </summary>
+/// <param name="ua">The SIP user agent associated with the RTP session.</param>
+/// <param name="type">The media type of the RTP packet (audio or video).</param>
+/// <param name="rtpPacket">The RTP packet received from the remote party.</param>
+private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
             if (mediaType == SDPMediaTypesEnum.audio)
             {
