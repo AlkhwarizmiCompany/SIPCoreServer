@@ -197,6 +197,14 @@ namespace SIPServer
             }
 
         }
+
+        private void End_Call(object sender, RoutedEventArgs e)
+        {
+            server.EndCall();
+
+        }
+
+       
     }
 }
 

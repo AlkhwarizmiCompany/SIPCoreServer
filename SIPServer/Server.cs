@@ -62,6 +62,7 @@ namespace SIPServer
         private static ConcurrentDictionary<string, SIPRegisterAccount> Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
         private static ConcurrentDictionary<string, SIPAcceptedCallsCall> AcceptedCalls = new ConcurrentDictionary<string, SIPAcceptedCallsCall>();
         private static ConcurrentDictionary<string, SIPUserAgent> ActiveCalls = new ConcurrentDictionary<string, SIPUserAgent>();
+        SIPAcceptedCallsCall call;
 
         public Server(Action<string> appendToLog)
         {
@@ -70,27 +71,21 @@ namespace SIPServer
             _sipTransport = new SIPTransport();
             _sipTransport.AddSIPChannel(new SIPUDPChannel(new IPEndPoint(IPAddress.Any, SIP_LISTEN_PORT)));
 
-
             _sipTransport.EnableTraceLogs();
 
             _sipTransport.SIPTransportRequestReceived += OnRequest;
 
-            _waveFile = new WaveFileWriter("G:\\src\\SIP\\SIPServer\\SIPServer\\output.mp3", _waveFormat);
+            _waveFile = new WaveFileWriter("C:\\Users\\IGFI\\Desktop\\repos\\SIPCoreServer\\SIPServer\\output.mp3", _waveFormat);
             waveOutDevice = new WaveOutEvent();
-
-
+            
             Log = AddConsoleLogger();
-
         }
 
         public async Task AnswerCall(string user)
         {
-            SIPAcceptedCallsCall call;
-
             if (!AcceptedCalls.TryGetValue(user, out call))
                 return;
 
- 
             var rtpSession = CreateRtpSession(call.UA, call.User);
             await call.UA.Answer(call.UAS, rtpSession);
 
@@ -98,6 +93,20 @@ namespace SIPServer
             {
                 await rtpSession.Start();
                 ActiveCalls.TryAdd(call.UA.Dialogue.CallId, call.UA);
+            }
+            _appendToLog?.Invoke($"Call Answerd: from {call.UA.ContactURI}");
+
+        }
+        public async Task EndCall()
+        {
+            if (ActiveCalls.TryRemove(call.UA.Dialogue.CallId, out var userAgent))
+            {
+                userAgent.Hangup();
+                _appendToLog?.Invoke($"Call ended.");
+            }
+            else
+            {
+                _appendToLog?.Invoke($"No active call with user {call.User} found.");
             }
         }
 
@@ -111,21 +120,14 @@ namespace SIPServer
                 user.Password = "xxx";
                 user.Expiry = 1;
                 user.Domain = "xyz";
-
-                if (sipRequest.Header.From != null &&
-                sipRequest.Header.From.FromTag != null &&
-                sipRequest.Header.To != null &&
-                sipRequest.Header.To.ToTag != null)
+              
+                if (sipRequest.Method == SIPMethodsEnum.INVITE)
                 {
-                    // This is an in-dialog request that will be handled directly by a user agent instance.
-                }
-                else if (sipRequest.Method == SIPMethodsEnum.INVITE)
-                {
-                    _appendToLog?.Invoke($"Incoming call request: {localSIPEndPoint}<-{remoteEndPoint} {sipRequest.URI}.");
+                    _appendToLog?.Invoke($"Incoming call request: {sipRequest.URI}.");
 
                     SIPUserAgent ua = new SIPUserAgent(_sipTransport, null);
                     ua.OnCallHungup += OnHangup;
-                  
+
                     var uas = ua.AcceptCall(sipRequest);
 
                     AcceptedCalls.TryAdd($"{user.Username}@{user.Domain}", new SIPAcceptedCallsCall(ua, uas, sipRequest.URI.User));
@@ -134,6 +136,8 @@ namespace SIPServer
                 {
                     SIPResponse byeResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.CallLegTransactionDoesNotExist, null);
                     await _sipTransport.SendResponseAsync(byeResponse);
+                    _appendToLog?.Invoke($"Call Ended");
+
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.SUBSCRIBE)
                 {
@@ -200,7 +204,7 @@ namespace SIPServer
             return rtpAudioSession;
         }
 
-        private static  void PlaySound(byte[] pcmSample)
+        private static void PlaySound(byte[] pcmSample)
         {
             using (var stream = new MemoryStream(pcmSample))
             {
@@ -215,27 +219,23 @@ namespace SIPServer
                 // Start playing the audio.
                 waveOutDevice.Play();
             }
-                
+
         }
 
-        /// <summary>
-        /// Event handler for receiving RTP packets.
-        /// </summary>
-        /// <param name="ua">The SIP user agent associated with the RTP session.</param>
-        /// <param name="type">The media type of the RTP packet (audio or video).</param>
-        /// <param name="rtpPacket">The RTP packet received from the remote party.</param>
-        private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
+/// <summary>
+/// Event handler for receiving RTP packets.
+/// </summary>
+/// <param name="ua">The SIP user agent associated with the RTP session.</param>
+/// <param name="type">The media type of the RTP packet (audio or video).</param>
+/// <param name="rtpPacket">The RTP packet received from the remote party.</param>
+private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
             if (mediaType == SDPMediaTypesEnum.audio)
             {
-                //_appendToLog?.Invoke($"OnRtpPacketReceived");
-
                 var sample = rtpPacket.Payload;
-
                 for (int index = 0; index < sample.Length; index++)
                 {
                     short pcm;
-
                     if (rtpPacket.Header.PayloadType == (int)SDPWellKnownMediaFormatsEnum.PCMA)
                     {
                         pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
@@ -254,10 +254,6 @@ namespace SIPServer
 
                     //PlaySound(pcmSample);
                 }
-
-
-
-
             }
         }
 
@@ -272,7 +268,6 @@ namespace SIPServer
             string callID = ua.Dialogue.CallId;
             Log.LogInformation($"Call {callID} received DTMF tone {key}, duration {duration}ms.");
         }
-
 
         /// <summary>
         /// Remove call from the active calls list.
