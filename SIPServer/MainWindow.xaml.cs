@@ -23,12 +23,14 @@ namespace SIPServer
     /// </summary>
     public partial class MainWindow : Window
     {
+        Server server;
+
         public MainWindow()
         {
 
             InitializeComponent();
 
-            Server server = new Server(AppendToLog);
+            server = new Server(AppendToLog);
         }
         private void AppendToLog(string message)
         {
@@ -37,5 +39,19 @@ namespace SIPServer
                 EventsInfoTextBox.AppendText(message + Environment.NewLine);
             });
         }
+
+        private void Answer_Call(object sender, RoutedEventArgs e)
+        {
+            server.AnswerCall("thisis@xyz");
+
+        }
+
+        private void End_Call(object sender, RoutedEventArgs e)
+        {
+            server.EndCall();
+
+        }
+
+       
     }
 }

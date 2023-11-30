@@ -11,6 +11,10 @@ using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorcery.Sys;
 using SIPSorceryMedia.Abstractions;
+using Windows.System;
+using Windows.Devices.Radios;
+using NAudio.Wave;
+using System.IO;
 
 namespace SIPServer
 {
@@ -30,14 +34,35 @@ namespace SIPServer
         }
     }
 
+    struct SIPAcceptedCallsCall
+    {
+        public SIPUserAgent UA;
+        public SIPServerUserAgent UAS;
+        public string User;
+
+        public SIPAcceptedCallsCall(SIPUserAgent ua, SIPServerUserAgent uas, string user)
+        {
+            UA = ua;
+            UAS = uas;
+            User = user;
+        }
+    }
+
     internal class Server
     {
         private static SIPTransport _sipTransport;
         private static int SIP_LISTEN_PORT = 5060;
         private static Microsoft.Extensions.Logging.ILogger Log = NullLogger.Instance;
-        private static ConcurrentDictionary<string, SIPUserAgent> _calls = new ConcurrentDictionary<string, SIPUserAgent>();
-        private static ConcurrentDictionary<string, SIPRegisterAccount> registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
         private static Action<string> _appendToLog;
+        private static WaveFileWriter _waveFile;
+        private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
+
+        private static IWavePlayer waveOutDevice;
+
+        private static ConcurrentDictionary<string, SIPRegisterAccount> Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
+        private static ConcurrentDictionary<string, SIPAcceptedCallsCall> AcceptedCalls = new ConcurrentDictionary<string, SIPAcceptedCallsCall>();
+        private static ConcurrentDictionary<string, SIPUserAgent> ActiveCalls = new ConcurrentDictionary<string, SIPUserAgent>();
+        SIPAcceptedCallsCall call;
 
         public Server(Action<string> appendToLog)
         {
@@ -46,61 +71,73 @@ namespace SIPServer
             _sipTransport = new SIPTransport();
             _sipTransport.AddSIPChannel(new SIPUDPChannel(new IPEndPoint(IPAddress.Any, SIP_LISTEN_PORT)));
 
-
             _sipTransport.EnableTraceLogs();
 
             _sipTransport.SIPTransportRequestReceived += OnRequest;
 
+            _waveFile = new WaveFileWriter("C:\\Users\\IGFI\\Desktop\\repos\\SIPCoreServer\\SIPServer\\output.mp3", _waveFormat);
+            waveOutDevice = new WaveOutEvent();
+            
             Log = AddConsoleLogger();
+        }
 
+        public async Task AnswerCall(string user)
+        {
+            if (!AcceptedCalls.TryGetValue(user, out call))
+                return;
+
+            var rtpSession = CreateRtpSession(call.UA, call.User);
+            await call.UA.Answer(call.UAS, rtpSession);
+
+            if (call.UA.IsCallActive)
+            {
+                await rtpSession.Start();
+                ActiveCalls.TryAdd(call.UA.Dialogue.CallId, call.UA);
+            }
+            _appendToLog?.Invoke($"Call Answerd: from {call.UA.ContactURI}");
+
+        }
+        public async Task EndCall()
+        {
+            if (ActiveCalls.TryRemove(call.UA.Dialogue.CallId, out var userAgent))
+            {
+                userAgent.Hangup();
+                _appendToLog?.Invoke($"Call ended.");
+            }
+            else
+            {
+                _appendToLog?.Invoke($"No active call with user {call.User} found.");
+            }
         }
 
         private static async Task OnRequest(SIPEndPoint localSIPEndPoint, SIPEndPoint remoteEndPoint, SIPRequest sipRequest)
         {
             try
             {
-                if (sipRequest.Header.From != null &&
-                sipRequest.Header.From.FromTag != null &&
-                sipRequest.Header.To != null &&
-                sipRequest.Header.To.ToTag != null)
+                SIPRegisterAccount user;
+
+                user.Username = sipRequest.Header.From.FromURI.User;
+                user.Password = "xxx";
+                user.Expiry = 1;
+                user.Domain = "xyz";
+              
+                if (sipRequest.Method == SIPMethodsEnum.INVITE)
                 {
-                    // This is an in-dialog request that will be handled directly by a user agent instance.
-                }
-                else if (sipRequest.Method == SIPMethodsEnum.INVITE)
-                {
-                    Log.LogInformation($"Incoming call request: {localSIPEndPoint}<-{remoteEndPoint} {sipRequest.URI}.");
+                    _appendToLog?.Invoke($"Incoming call request: {sipRequest.URI}.");
 
                     SIPUserAgent ua = new SIPUserAgent(_sipTransport, null);
                     ua.OnCallHungup += OnHangup;
-                    //ua.ServerCallCancelled += (uas) => Log.LogDebug("Incoming call cancelled by remote party.");
-                    //ua.OnDtmfTone += (key, duration) => OnDtmfTone(ua, key, duration);
-                    //ua.OnRtpEvent += (evt, hdr) => Log.LogDebug($"rtp event {evt.EventID}, duration {evt.Duration}, end of event {evt.EndOfEvent}, timestamp {hdr.Timestamp}, marker {hdr.MarkerBit}.");
-                    ////ua.OnTransactionTraceMessage += (tx, msg) => Log.LogDebug($"uas tx {tx.TransactionId}: {msg}");
-                    //ua.ServerCallRingTimeout += (uas) =>
-                    //{
-                    //    Log.LogWarning($"Incoming call timed out in {uas.ClientTransaction.TransactionState} state waiting for client ACK, terminating.");
-                    //    ua.Hangup();
-                    //};
 
                     var uas = ua.AcceptCall(sipRequest);
-                    var rtpSession = CreateRtpSession(ua, sipRequest.URI.User);
 
-                    // Insert a brief delay to allow testing of the "Ringing" progress response.
-                    // Without the delay the call gets answered before it can be sent.
-                    await Task.Delay(500);
-
-                    await ua.Answer(uas, rtpSession);
-
-                    if (ua.IsCallActive)
-                    {
-                        await rtpSession.Start();
-                        _calls.TryAdd(ua.Dialogue.CallId, ua);
-                    }
+                    AcceptedCalls.TryAdd($"{user.Username}@{user.Domain}", new SIPAcceptedCallsCall(ua, uas, sipRequest.URI.User));
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.BYE)
                 {
                     SIPResponse byeResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.CallLegTransactionDoesNotExist, null);
                     await _sipTransport.SendResponseAsync(byeResponse);
+                    _appendToLog?.Invoke($"Call Ended");
+
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.SUBSCRIBE)
                 {
@@ -109,19 +146,8 @@ namespace SIPServer
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.OPTIONS || sipRequest.Method == SIPMethodsEnum.REGISTER)
                 {
-                    SIPRegisterAccount user;
 
-                    user.Username = sipRequest.Header.From.FromURI.User;
-                    user.Password = "xxx";
-                    user.Expiry = 1;
-                    user.Domain = "xyz";
-
-                    //string username = sipRequest.Header.From.FromURI.User;
-
-                    //// Extract the received password hash from the SIP request (for digest authentication)
-                    //string receivedPasswordHash = sipRequest.Header.AuthenticationHeaders[0].ToString();
-
-                    registrations.TryAdd($"{user.Username}@{user.Domain}", user);
+                    Registrations.TryAdd($"{user.Username}@{user.Domain}", user);
 
                     SIPResponse optionsResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.Ok, null);
                     await _sipTransport.SendResponseAsync(optionsResponse);
@@ -178,6 +204,23 @@ namespace SIPServer
             return rtpAudioSession;
         }
 
+        private static void PlaySound(byte[] pcmSample)
+        {
+            using (var stream = new MemoryStream(pcmSample))
+            {
+                stream.Position = 0;
+
+                // Create a WaveChannel32 to ensure the audio is in the correct format.
+                var waveChannel = new WaveChannel32(new WaveFileReader(stream));
+
+                // Initialize the WaveOutDevice with the WaveChannel32.
+                waveOutDevice.Init(waveChannel);
+
+                // Start playing the audio.
+                waveOutDevice.Play();
+            }
+
+        }
 
         /// <summary>
         /// Event handler for receiving RTP packets.
@@ -185,9 +228,33 @@ namespace SIPServer
         /// <param name="ua">The SIP user agent associated with the RTP session.</param>
         /// <param name="type">The media type of the RTP packet (audio or video).</param>
         /// <param name="rtpPacket">The RTP packet received from the remote party.</param>
-        private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum type, RTPPacket rtpPacket)
+        private static void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
-            // The raw audio data is available in rtpPacket.Payload.
+            if (mediaType == SDPMediaTypesEnum.audio)
+            {
+                var sample = rtpPacket.Payload;
+                for (int index = 0; index < sample.Length; index++)
+                {
+                    short pcm;
+                    if (rtpPacket.Header.PayloadType == (int)SDPWellKnownMediaFormatsEnum.PCMA)
+                    {
+                        pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
+                        //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        //_waveFile.Write(pcmSample, 0, 2);
+                    }
+                    else
+                    {
+                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                        //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        //_waveFile.Write(pcmSample, 0, 2);
+                    }
+
+                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                    _waveFile.Write(pcmSample, 0, 2);
+
+                    //PlaySound(pcmSample);
+                }
+            }
         }
 
         /// <summary>
@@ -202,19 +269,27 @@ namespace SIPServer
             Log.LogInformation($"Call {callID} received DTMF tone {key}, duration {duration}ms.");
         }
 
-
         /// <summary>
         /// Remove call from the active calls list.
         /// </summary>
         /// <param name="dialogue">The dialogue that was hungup.</param>
         private static void OnHangup(SIPDialogue dialogue)
         {
+            _waveFile?.Close();
+
+            if (waveOutDevice != null)
+            {
+                waveOutDevice.Stop();
+                waveOutDevice.Dispose();
+                waveOutDevice = null;
+            }
+
             if (dialogue != null)
             {
                 string callID = dialogue.CallId;
-                if (_calls.ContainsKey(callID))
+                if (ActiveCalls.ContainsKey(callID))
                 {
-                    if (_calls.TryRemove(callID, out var ua))
+                    if (ActiveCalls.TryRemove(callID, out var ua))
                     {
                         // This app only uses each SIP user agent once so here the agent is 
                         // explicitly closed to prevent is responding to any new SIP requests.

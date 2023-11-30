@@ -6,11 +6,16 @@
         xmlns:local="clr-namespace:SIPServer"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
-
-<Grid>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition Width="399*"/>
+        </Grid.ColumnDefinitions>
         <TextBox Name="EventsInfoTextBox" Grid.ColumnSpan="2" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"  Height="141" VerticalAlignment="Bottom"/>
+        <Button Content="Answer Incomming call" HorizontalAlignment="Left" Margin="560,130,0,0" VerticalAlignment="Top" Height="39" Width="160" Click="Answer_Call" Grid.Column="1"/>
+        <Button Content="Hang up call" HorizontalAlignment="Left" Margin="288,130,0,0" VerticalAlignment="Top" Height="39" Width="160" Click="End_Call" Grid.Column="1"/>
 
-</Grid>
-    
+    </Grid>
+
 </Window>
 
