@@ -12,17 +12,11 @@
             <ColumnDefinition Width="399*"/>
         </Grid.ColumnDefinitions>
         <TextBox Name="EventsInfoTextBox" Grid.ColumnSpan="2" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"  Height="141" VerticalAlignment="Bottom"/>
-<<<<<<< HEAD
         <Button Content="Answer Incomming call" HorizontalAlignment="Left" Margin="560,130,0,0" VerticalAlignment="Top" Height="39" Width="160" Click="Answer_Call" Grid.Column="1"/>
         <Button Content="Hang up call" HorizontalAlignment="Left" Margin="288,130,0,0" VerticalAlignment="Top" Height="39" Width="160" Click="End_Call" Grid.Column="1"/>
 
     </Grid>
 
-=======
-        <Button Content="Button" HorizontalAlignment="Left" Margin="131,143,0,0" VerticalAlignment="Top" Click="Button_Click"/>
 
-    </Grid>
-    
->>>>>>> 38fede85869cf5b1a63f8f67785902c8e6b89098
 </Window>
 
