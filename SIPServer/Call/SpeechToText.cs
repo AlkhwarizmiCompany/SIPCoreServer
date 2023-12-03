@@ -2,31 +2,26 @@
 using Google.Cloud.Speech.V1;
 using SIPServer.Models;
 using System.Collections.Concurrent;
-using static System.Net.Mime.MediaTypeNames;
+using System.Threading.Tasks;
 
 namespace SIPServer.Call
 {
-
     class SpeechToText
     {
-        private AsyncResponseStream<StreamingRecognizeResponse> responseStream;
         private SpeechClient.StreamingRecognizeStream streamingCall;
-
-        private Task recognizeTask;
-        private Task TranscriptTask;
-        private Task StreamingRecognizeTask;
-        private Task InitializeTask;
 
         private readonly SIPCall Call;
         private readonly Action<string> AppendToLog;
+        private CancellationTokenSource cancellationTokenSource;
 
         public SpeechToText(SIPCall call, Action<string> appendToLog)
         {
-
-            InitializeTask = Initialize();
-
             Call = call;
             AppendToLog = appendToLog;
+            cancellationTokenSource = new CancellationTokenSource();
+
+            // Initialize asynchronously
+            Task.Run(() => Initialize());
         }
 
         private async Task Initialize()
@@ -35,8 +30,7 @@ namespace SIPServer.Call
             SpeechClient client = SpeechClient.Create();
             streamingCall = client.StreamingRecognize();
             // The response stream
-            responseStream = streamingCall.GetResponseStream();
-
+            var responseStream = streamingCall.GetResponseStream();
 
             var streamingConfig = new StreamingRecognitionConfig
             {
@@ -54,11 +48,10 @@ namespace SIPServer.Call
                 StreamingConfig = streamingConfig
             });
 
-            TranscriptTask = Transcript(responseStream);
-            StreamingRecognizeTask = InfiniteStreamingRecognize(streamingCall);
-
+            // Start tasks
+            _ = Transcript(responseStream);
+            _ = InfiniteStreamingRecognize(streamingCall);
         }
-
 
         private async Task Transcript(AsyncResponseStream<StreamingRecognizeResponse> responseStream)
         {
@@ -82,13 +75,11 @@ namespace SIPServer.Call
 
         public async Task InfiniteStreamingRecognize(SpeechClient.StreamingRecognizeStream streamingCall)
         {
-
-            // Send audio from the microphone to the Speech API
             try
             {
-                while (true)
+                while (!cancellationTokenSource.IsCancellationRequested)
                 {
-                    byte[] buffer = Call.CallAudio.Take(); // Blocking call
+                    byte[] buffer = Call.CallAudio.Take(); 
                     if (buffer.Length > 0)
                     {
                         await streamingCall.WriteAsync(new StreamingRecognizeRequest
@@ -100,20 +91,17 @@ namespace SIPServer.Call
             }
             catch (OperationCanceledException)
             {
-                // This can be triggered by stopping the recording
                 AppendToLog("Streaming was canceled.");
             }
             finally
             {
                 await streamingCall.WriteCompleteAsync();
             }
-            // Wait for the response handler to complete processing
-            //await responseHandler;
-            // Shutdown the client
-            //client.Dispose();
         }
 
+        public void Stop()
+        {
+            cancellationTokenSource.Cancel();
+        }
     }
 }
-
-
