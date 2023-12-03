@@ -1,8 +1,13 @@
-﻿using SIPSorcery.Media;
+﻿using Google.Cloud.Speech.V1;
+using Google.Protobuf;
+using Grpc.Core;
+using NAudio.Wave;
+using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorceryMedia.Abstractions;
+using System.IO;
 using System.Net;
 using System.Runtime.Intrinsics.Arm;
 using System.Text;
@@ -40,18 +45,17 @@ namespace SIPServer
             });
         }
 
+        private void End_Call(object sender, RoutedEventArgs e)
+        {
+            server.EndCall("");
+
+        }
+
         private void Answer_Call(object sender, RoutedEventArgs e)
         {
             server.AnswerCall("thisis@xyz");
 
         }
 
-        private void End_Call(object sender, RoutedEventArgs e)
-        {
-            server.EndCall();
-
-        }
-
-       
     }
 }
