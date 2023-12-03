@@ -1,0 +1,12 @@
+{
+  "type": "service_account",
+  "project_id": "tensile-axiom-281814",
+  "private_key_id": "5428b0b1f7b0e7d0354eb7b033c105968915a6db",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCyqwMwKVz65xW+\nx5E255aLrN6sqM8oxN9/rrk6dzoUhzEAoV73ePcGJ398iwGlzSqdSfxq0mSLSswq\nVavxSzEUuVUd/qWVafMx7vUm5A5HvdCOmUUq2CfeOQV1ORFI0KskkoigSPHJIMJh\nDr4RvANvUnsOWW59YZ7ovWTyPqgIoGr2m79nNmMW7kxCyvAwKyDwY9cr0FDLNRFU\nvPOUkq/yPUgoHaWVY31vuAx7E3MS7p8q8Uv5ZdMBoPsXfUSlzVR6YLDGY5dfkObo\nrn66JFxamMky2qUP+8xAtQLBcsAK2/kpaj46Bph3kD6zw8JF1yc4WlnQr9VtOZnI\nFq+HOBAxAgMBAAECggEAV6tubw184GjP1MNcUBKnXnY+9X4H2Ltx59c2cKfcSgJk\nWyjTzp7+p3huKBCViGP6CyAoycnfKDJVqFhNfKMmvEKMr6EqYvyQJupYRPMWxsEv\nOymeNP3H4lUchn6wKoip0dJNVEk2yzhV6QYw4cbd8JwKYeokO0XRkeaNSAjSrxgk\n/Htcf1/57UCLnFch82emIUXcdWDnOzp2bLpEA4WVWbdUBamhy6E8OemsZtpjKx/Z\na4Jqk/5iHAL0njx7sfysLnly6Mmslh8Hn+hJWJpwl0I9zfttg8VjLZYZ2M73Q/eF\nitC0Y6qzy3IFHZCd8OYkSkMwdEC7j8Hs9OUSUeloOQKBgQDuuSMUarD99NWtWYLF\nCdf9uQhruaNBQJm3LpzlIuCVlHlGf3vZuMyBlqcbXIgOU6lk6gezUoJ6tPs5l8JO\nOOf7Ls8q3CIH9scfa9JfiavSyzNLW37gGWoOsG7p1lr7yhcCxMrHW5Jv0oN7U4Tj\nwmLQBao1b519y+0OKtcd8S+TVwKBgQC/mTk6s/KW6Nri++uA9jKU/8J7InZ0FX3W\nLtg6qNWuK4tP//7UTk7cbQZBkN6ldJ9zIT8Di3rN5EIlihowYB+/QzZxFodhZezn\nYwEU0UM9K/X0Ks7/GTkVJ8Fx4TsksoV84NsEQ4u+HREW3vth4n0SbiiY/etypQ9/\nQLJyoIcLtwKBgHpSOSxkAu8N/lNF82DdS2SB5FO2mnV8EYewhcpPVb6vhnjeJ+sG\n6xtXw6acgka9DaZc2LdFBwCzLat0HKcSN6QYdyTiCToFdECgcfpsQ7POVSk+58MS\noqqGMz70jEhKZAISLkl6nY1Y0/BkekpuN02aKX4aBBwKWxyQTQvVougfAoGAY0eb\nLv7leisImMte+cEY7rokZTezV213eg9l/edUad6oXnjQ6+Pz2yYnMrxFkkh/AuI8\nS7LvnFZlrBwGfACjErFaOXkqB18QRcm4WrggdkccODwibG7+dCbYhxDlW5uhrda5\nxljVxVo8a7R5X/xDQNSR9szEPvCmuhKlJN5ne7sCgYBw4V5NnLydaOdBBoQVZvm7\n3j4wQWZ5eY/jWnS9gAnoD1ilDr544lelyCq4g7Fzbh/ES1PBTC+XQoVbHVcKq7+H\nIVno1JzR4qXZaKviTUASgm83a4Op9FGwZDLg/kG5mBaDR3E7jlrftRz6p0uO/Ytg\nJb/RiaqjHQvI6B6laEHz2Q==\n-----END PRIVATE KEY-----\n",
+  "client_email": "speech-recognition@tensile-axiom-281814.iam.gserviceaccount.com",
+  "client_id": "104777731147928364457",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/speech-recognition%40tensile-axiom-281814.iam.gserviceaccount.com"
+}

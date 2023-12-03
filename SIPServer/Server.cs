@@ -15,9 +15,10 @@ namespace SIPServer
         private readonly SIPTransport SipTransport;
 
 
-        private ConcurrentDictionary<string, SIPRegisterAccount> Registrations;
-        private ConcurrentDictionary<string, SIPCall> AcceptedCalls;
-        private ConcurrentDictionary<string, SIPCall> ActiveCalls;
+        private static ConcurrentDictionary<string, SIPRegisterAccount> Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
+        private static ConcurrentDictionary<string, SIPAcceptedCallsCall> AcceptedCalls = new ConcurrentDictionary<string, SIPAcceptedCallsCall>();
+        private static ConcurrentDictionary<string, SIPUserAgent> ActiveCalls = new ConcurrentDictionary<string, SIPUserAgent>();
+        SIPAcceptedCallsCall call;
 
         private Action<string> AppendToLog;
 
@@ -33,15 +34,15 @@ namespace SIPServer
             SipTransport.SIPTransportRequestReceived += OnRequest;
 
 
-            Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
-            AcceptedCalls = new ConcurrentDictionary<string, SIPCall>();
-            ActiveCalls = new ConcurrentDictionary<string, SIPCall>();
+            Registrations   = new ConcurrentDictionary<string, SIPRegisterAccount>();
+            AcceptedCalls   = new ConcurrentDictionary<string, SIPCall>();
+            ActiveCalls     = new ConcurrentDictionary<string, SIPCall>();
         }
 
         public async Task AnswerCall(string user)
         {
             SIPCall call;
-            bool ret = false;
+            bool    ret = false;
 
             if (!AcceptedCalls.TryGetValue(user, out call))
                 return;
@@ -49,7 +50,7 @@ namespace SIPServer
             CallManager CallManager = new CallManager(call, AppendToLog);
 
             //ret = await CallManager.AnswerAsync();
-
+            
             //if (!ret)
             //    AppendToLog($"Call Not Answerd: from {call.UA.ContactURI}");
 
