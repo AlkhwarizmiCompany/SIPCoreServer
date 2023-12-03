@@ -11,6 +11,9 @@ using System.IO;
 using SIPServer.Models;
 using static System.Net.Mime.MediaTypeNames;
 using Windows.Media.Protection.PlayReady;
+using System;
+using System.IO;
+using Google.Protobuf;
 
 namespace SIPServer.Call
 {
@@ -47,12 +50,33 @@ namespace SIPServer.Call
 
             AudioConfig = new AudioConfig
             {
-                AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Mp3
+                AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Linear16
             };
 
         }
 
-        public async Task Run()
+        private void PlayByteArray(byte[] byteArray)
+        {
+            using (MemoryStream memoryStream = new MemoryStream(byteArray))
+            {
+                // Use NAudio to play the audio
+                using (WaveFileReader waveFileReader = new WaveFileReader(memoryStream))
+                {
+                    using (WaveOutEvent waveOut = new WaveOutEvent())
+                    {
+                        waveOut.Init(waveFileReader);
+                        waveOut.Play();
+
+                        while (waveOut.PlaybackState == PlaybackState.Playing)
+                        {
+                            System.Threading.Thread.Sleep(100);
+                        }
+                    }
+                }
+            }
+        }
+
+        public void TTS()
         {
             while(true)
             {
@@ -68,13 +92,24 @@ namespace SIPServer.Call
 
                 var response = TTSClient.SynthesizeSpeech(input, Voice, AudioConfig);
 
-                //Call.ResponseAudio.Add(response.AudioContent.)
-                using (Stream output = File.Create("output.mp3"))
-                {
-                    response.AudioContent.WriteTo(output);
-                    AppendToLog("Audio content written to file \"output.mp3\"");
-                }
+                PlayByteArray(response.AudioContent.ToByteArray());
+
+                ////Call.ResponseAudio.Add(response.AudioContent.)
+                //using (Stream output = File.Create("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output1.mp3"))
+                //{
+                //    response.AudioContent.WriteTo(output);
+                //    AppendToLog("Audio content written to file \"output.mp3\"");
+                //}
             }
+        }
+
+        public async Task Run()
+        {
+
+            Thread thread = new Thread(new ThreadStart(TTS));
+            thread.Start();
+
+
         }
 
     }

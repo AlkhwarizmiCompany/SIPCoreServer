@@ -30,10 +30,10 @@ namespace SIPServer.Call
             MicAudio        = new MicAudio(Call, AppendToLog);
             STT             = new SpeechToText(Call, AppendToLog);
             Chatbot         = new Chatbot(Call, AppendToLog);
-            //TTS             = new TextToSpeech(Call, AppendToLog);
+            TTS             = new TextToSpeech(Call, AppendToLog);
 
             Chatbot.Run();
-            //TTS.Run();
+            TTS.Run();
         }
 
         public async Task<bool> AnswerAsync()

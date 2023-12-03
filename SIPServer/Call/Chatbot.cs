@@ -45,7 +45,7 @@ namespace SIPServer.Call
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 var response = _httpClient.PostAsync($"{_api}/Ask", content);
                 if (!response.IsCompletedSuccessfully)
-                    return "";
+                    return "عذرا حدث خطأ فى الاتصال";
 
                 string responseString = response.Result.ToString();
                 return responseString;
