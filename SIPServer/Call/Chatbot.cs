@@ -28,8 +28,7 @@ namespace SIPServer.Call
             AppendToLog = appendToLog;
         }
 
-
-        public string Ask(string input)
+        public async Task<string> Ask(string input)
         {
 
             try
@@ -43,11 +42,11 @@ namespace SIPServer.Call
                 );
 
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                var response = _httpClient.PostAsync($"{_api}/Ask", content);
-                if (!response.IsCompletedSuccessfully)
+                var response = await _httpClient.PostAsync($"{_api}/Ask", content);
+                if (!response.IsSuccessStatusCode)
                     return "";
 
-                string responseString = response.Result.ToString();
+                string responseString = response.Content.ToString();
                 return responseString;
 
             }
@@ -58,26 +57,29 @@ namespace SIPServer.Call
         }
     
     
-        public void AskChatbot()
+        public async Task AskChatbotAsync()
         {
             while (true)
             {
                 string input = Call.TranscriptedText.Take(); // Blocking call
 
-                string response = Ask(input);
+                string response = await Ask(input);
 
                 Call.ChatbotAnswers.Add(response);
             }
         }
 
+        //public async Task Run()
+        //{
+        //    Thread thread = new Thread(new ThreadStart(AskChatbotAsync));
+        //    thread.Start();
+        //}
+
         public async Task Run()
         {
-
-            Thread thread = new Thread(new ThreadStart(AskChatbot));
-            thread.Start();
-
-           
+            await Task.Run(async () => await AskChatbotAsync());
         }
+
     }
 
 }

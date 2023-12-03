@@ -22,7 +22,7 @@ namespace SIPServer.Call
         private readonly Action<string> AppendToLog;
         public CallManager(SIPCall call, Action<string> appendToLog)
         {
-            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", @"G:\src\SIP\SIPServer\SIPServer\Assets\tensile-axiom-281814-5428b0b1f7b0.json");
+            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", @"C:\credentials\credentials.json");
 
             Call        = call;
             AppendToLog = appendToLog;
@@ -91,27 +91,6 @@ namespace SIPServer.Call
                 var sample = rtpPacket.Payload;
                 Call.CallAudio.Add(sample);
 
-                //for (int index = 0; index < sample.Length; index++)
-                //{
-                //    short pcm;
-                //    if (rtpPacket.Header.PayloadType == (int)SDPWellKnownMediaFormatsEnum.PCMA)
-                //    {
-                //        pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
-                //        //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                //        //_waveFile.Write(pcmSample, 0, 2);
-                //    }
-                //    else
-                //    {
-                //        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]); // PCMU
-                //        //byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                //        //_waveFile.Write(pcmSample, 0, 2);
-                //    }
-
-                //    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                //    //_waveFile.Write(pcmSample, 0, 2);
-
-                //    Call.CallAudio.Add(pcmSample);
-                //}
             }
         }
 
