@@ -21,7 +21,7 @@ namespace SIPServer.Call
     class TextToSpeech
     {
 
-        private readonly SIPCall        Call;
+        private SIPCall        Call;
         private readonly Action<string> AppendToLog;
 
         private TextToSpeechClient      TTSClient;
@@ -74,6 +74,8 @@ namespace SIPServer.Call
                     }
                 }
             }
+
+            Call.IsRunning = false;
         }
 
         public void TTS()

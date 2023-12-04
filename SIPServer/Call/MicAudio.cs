@@ -10,7 +10,7 @@ namespace SIPServer.Call
 {
     class MicAudio
     {
-        private readonly SIPCall Call;
+        private SIPCall Call;
         private readonly Action<string> AppendToLog;
 
         private bool isRecording = false;
@@ -32,11 +32,13 @@ namespace SIPServer.Call
             // Configure microphone input
             waveIn = new WaveInEvent
             {
-                WaveFormat = new WaveFormat(16000, 1) // Sample rate and channels
+                WaveFormat = new WaveFormat(8000, 1) // Sample rate and channels
             };
             waveIn.DataAvailable += (sender, e) =>
             {
-                Call.CallAudio.Add(e.Buffer.Clone() as byte[]);
+                var samples = e.Buffer.Clone() as byte[];
+
+                Call.CallAudio.Add(samples);
             };
 
             waveIn.StartRecording();

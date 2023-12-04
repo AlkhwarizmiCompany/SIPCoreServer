@@ -1,9 +1,11 @@
-﻿using SIPSorcery.SIP.App;
+﻿using NAudio.Wave;
+using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
+using Windows.Media.SpeechRecognition;
 
 namespace SIPServer.Models
 {
-    struct SIPCall
+    class SIPCall
     {
         public string User { get; set; }
         public SIPUserAgent UA { get; set; }
@@ -13,6 +15,13 @@ namespace SIPServer.Models
         public BlockingCollection<string> TranscriptedText  { get; set; }
         public BlockingCollection<string> ChatbotAnswers    { get; set; }
         public BlockingCollection<byte[]> ResponseAudio     { get; set; }
+
+        public bool IsRunning { get; set; }
+        public WaveFileWriter WaveFile;
+        public byte[] pcmSamples;
+
+        private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
+
 
         public SIPCall(SIPUserAgent ua, SIPServerUserAgent uas, string user)
         {
@@ -24,6 +33,12 @@ namespace SIPServer.Models
             TranscriptedText    = new BlockingCollection<string>();
             ChatbotAnswers      = new BlockingCollection<string>();
             ResponseAudio       = new BlockingCollection<byte[]>();
+
+            IsRunning = false;
+
+            WaveFile = new WaveFileWriter("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output5.mp3", _waveFormat);
+            
+            pcmSamples = new byte[0];
         }
     }
 }

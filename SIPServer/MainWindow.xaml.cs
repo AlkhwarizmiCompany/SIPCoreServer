@@ -1,12 +1,15 @@
 ﻿using Google.Cloud.Speech.V1;
 using Google.Protobuf;
 using Grpc.Core;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json; 
 using NAudio.Wave;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorceryMedia.Abstractions;
+using System.Configuration;
 using System.IO;
 using System.Net;
 using System.Runtime.Intrinsics.Arm;
@@ -30,12 +33,23 @@ namespace SIPServer
     {
         Server server;
 
+
         public MainWindow()
         {
 
             InitializeComponent();
 
-            server = new Server(AppendToLog);
+
+            var builder = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+
+            IConfigurationRoot configuration = builder.Build();
+            server = new Server(AppendToLog, configuration);
+
+            // access it through this line 
+            var someValue = configuration["GoogleAppCredentials"];
+
+
         }
         private void AppendToLog(string message)
         {
@@ -44,6 +58,8 @@ namespace SIPServer
                 EventsInfoTextBox.AppendText(message + Environment.NewLine);
             });
         }
+
+
 
         private void End_Call(object sender, RoutedEventArgs e)
         {

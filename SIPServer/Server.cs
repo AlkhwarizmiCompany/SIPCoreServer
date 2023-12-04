@@ -5,6 +5,9 @@ using SIPSorcery.SIP.App;
 using SIPServer.Models;
 using SIPServer.Call;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using System.Configuration;
+using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace SIPServer
 {
@@ -20,10 +23,12 @@ namespace SIPServer
         private ConcurrentDictionary<string, SIPCall> ActiveCalls;
 
         private Action<string> AppendToLog;
-
-        public Server(Action<string> appendToLog)
+        IConfigurationRoot Configuration;
+        string callId;
+        public Server(Action<string> appendToLog, IConfigurationRoot configuration)
         {
             AppendToLog = appendToLog; // Store the logging action
+            Configuration = configuration;
 
             SipTransport = new SIPTransport();
             SipTransport.AddSIPChannel(new SIPUDPChannel(new IPEndPoint(IPAddress.Any, SIP_LISTEN_PORT)));
@@ -46,12 +51,14 @@ namespace SIPServer
             if (!AcceptedCalls.TryGetValue(user, out call))
                 return;
 
-            CallManager CallManager = new CallManager(call, AppendToLog);
+            CallManager CallManager = new CallManager(call, AppendToLog, Configuration);
 
             ret = await CallManager.AnswerAsync();
 
             if (!ret)
                 AppendToLog($"Call Not Answerd: from {call.UA.ContactURI}");
+
+            callId = call.UA.Dialogue.CallId;
 
             ActiveCalls.TryAdd(call.UA.Dialogue.CallId, call);
             AppendToLog($"Call Answerd: from {call.UA.ContactURI}");
@@ -59,8 +66,10 @@ namespace SIPServer
         public async Task EndCall(string CallId)
         {
             SIPCall call;
+            
+            CallId = callId;
 
-            if (ActiveCalls.TryRemove(CallId, out call))
+            if (ActiveCalls.TryGetValue(CallId, out call))
             {
                 call.UA.Hangup();
                 AppendToLog($"Call ended.");
@@ -136,6 +145,7 @@ namespace SIPServer
                         // This app only uses each SIP user agent once so here the agent is 
                         // explicitly closed to prevent is responding to any new SIP requests.
                         call.UA.Close();
+                        call.WaveFile.Close();
                     }
                 }
             }

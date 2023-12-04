@@ -1,4 +1,6 @@
-﻿using SIPServer.Models;
+﻿using Microsoft.Extensions.Configuration;
+using NAudio.Wave;
+using SIPServer.Models;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorcery.SIP.App;
@@ -8,7 +10,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
+using System.Diagnostics;
+using ABI.System;
 namespace SIPServer.Call
 {
     class CallManager
@@ -16,18 +21,25 @@ namespace SIPServer.Call
         private readonly SpeechToText   STT;
         private readonly TextToSpeech   TTS;
         private readonly Chatbot        Chatbot;
-        private readonly MicAudio       MicAudio;
+        private readonly MicAudio MicAudio;
 
-        private readonly SIPCall        Call;
+        private SIPCall        Call;
         private readonly Action<string> AppendToLog;
-        public CallManager(SIPCall call, Action<string> appendToLog)
+
+
+        IConfigurationRoot configuration;
+
+        public CallManager(SIPCall call, Action<string> appendToLog, IConfiguration configuration)
         {
-            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", @"C:\credentials\credentials.json");
+            var cred = configuration["GoogleAppCredentials"];
+
+            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\tensile-axiom-281814-5428b0b1f7b0.json");
 
             Call        = call;
             AppendToLog = appendToLog;
 
-            MicAudio        = new MicAudio(Call, AppendToLog);
+
+            //MicAudio        = new MicAudio(Call, AppendToLog);
             STT             = new SpeechToText(Call, AppendToLog);
             Chatbot         = new Chatbot(Call, AppendToLog);
             TTS             = new TextToSpeech(Call, AppendToLog);
@@ -50,7 +62,8 @@ namespace SIPServer.Call
         }
         private VoIPMediaSession CreateRtpSession(SIPUserAgent ua, string dst)
         {
-            List<AudioCodecsEnum> codecs = new List<AudioCodecsEnum> { AudioCodecsEnum.PCMU, AudioCodecsEnum.PCMA, AudioCodecsEnum.G722 };
+            List<AudioCodecsEnum> codecs = new List<AudioCodecsEnum> { AudioCodecsEnum.PCMA };
+            //List<AudioCodecsEnum> codecs = new List<AudioCodecsEnum> { AudioCodecsEnum.PCMU, AudioCodecsEnum.PCMA, AudioCodecsEnum.G722 };
 
             var audioSource = AudioSourcesEnum.SineWave;
             if (string.IsNullOrEmpty(dst) || !Enum.TryParse(dst, out audioSource))
@@ -86,12 +99,43 @@ namespace SIPServer.Call
 
         private void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
+            //Stopwatch stopwatch = new Stopwatch();
+
+            //stopwatch.Start();
+
             if (mediaType == SDPMediaTypesEnum.audio)
             {
                 var sample = rtpPacket.Payload;
-                Call.CallAudio.Add(sample);
 
+                for (int index = 0; index < sample.Length; index++)
+                {
+                    short pcm;
+
+                    if (rtpPacket.Header.PayloadType == (int)SDPWellKnownMediaFormatsEnum.PCMA)
+                        pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
+                    else
+                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+
+                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                    //Call.WaveFile.Write(pcmSample, 0, 2);
+                    Call.pcmSamples = Call.pcmSamples.Concat(pcmSample).ToArray();
+
+                    if (Call.pcmSamples.Length >= 1600)
+                    {
+                        Call.CallAudio.Add(Call.pcmSamples);
+                        Call.pcmSamples = new byte[0];
+                    }
+                }
             }
+            
+            //stopwatch.Stop();
+
+            //System.TimeSpan elapsedTime = stopwatch.Elapsed;
+
+            //double milliseconds = elapsedTime.TotalMilliseconds;
+
+
+            //AppendToLog($"milliseconds: {milliseconds}");
         }
 
     }

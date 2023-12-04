@@ -10,7 +10,7 @@ namespace SIPServer.Call
     {
         private SpeechClient.StreamingRecognizeStream streamingCall;
 
-        private readonly SIPCall Call;
+        private SIPCall Call;
         private readonly Action<string> AppendToLog;
         private CancellationTokenSource cancellationTokenSource;
 
@@ -37,7 +37,8 @@ namespace SIPServer.Call
                 Config = new RecognitionConfig
                 {
                     Encoding = RecognitionConfig.Types.AudioEncoding.Linear16,
-                    SampleRateHertz = 16000,
+                    //Encoding = RecognitionConfig.Types.AudioEncoding.Linear16,
+                    SampleRateHertz = 8000,
                     LanguageCode = LanguageCodes.Arabic.Egypt,
                 },
                 InterimResults = true,
@@ -57,19 +58,34 @@ namespace SIPServer.Call
         {
             string text;
 
-            await foreach (var response in responseStream)
+            try
             {
-                foreach (var result in response.Results)
+                await foreach (var response in responseStream)
                 {
-                    if (!result.IsFinal)
-                        continue;
+                    foreach (var result in response.Results)
+                    {
+                        if (!result.IsFinal)
+                            continue;
 
-                    text = result.Alternatives[0].Transcript;
+                        text = result.Alternatives[0].Transcript;
 
-                    AppendToLog($"Transcript: {text}");
 
-                    Call.TranscriptedText.Add(text);
+                        if (!Call.IsRunning)
+                        {
+                            AppendToLog($"Transcript Added: {text}");
+
+                            Call.TranscriptedText.Add(text);
+                            Call.IsRunning = true;
+                        }
+                        else
+                            AppendToLog($"Transcript Not Added: {text}");
+
+                    }
                 }
+            }
+            catch (Exception e)
+            {
+                AppendToLog($"Exception: {e}");
             }
         }
 
@@ -80,6 +96,7 @@ namespace SIPServer.Call
                 while (!cancellationTokenSource.IsCancellationRequested)
                 {
                     byte[] buffer = Call.CallAudio.Take(); 
+
                     if (buffer.Length > 0)
                     {
                         await streamingCall.WriteAsync(new StreamingRecognizeRequest
