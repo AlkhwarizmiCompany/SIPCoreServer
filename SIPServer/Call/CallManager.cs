@@ -1,19 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
-using NAudio.Wave;
 using SIPServer.Models;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
-using SIPSorcery.SIP.App;
 using SIPSorceryMedia.Abstractions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.Json;
-using System.Diagnostics;
-using ABI.System;
+using System.IO;
+using System.Net;
+
 namespace SIPServer.Call
 {
     class CallManager
@@ -21,13 +13,17 @@ namespace SIPServer.Call
         private readonly SpeechToText   STT;
         private readonly TextToSpeech   TTS;
         private readonly Chatbot        Chatbot;
-        private readonly MicAudio MicAudio;
+        private readonly MicAudio       MicAudio;
 
-        private SIPCall        Call;
+        private SIPCall                 Call;
+
         private readonly Action<string> AppendToLog;
+        IConfigurationRoot              configuration;
 
 
-        IConfigurationRoot configuration;
+        private const string WELCOME_8K = "G:\\src\\console\\sipsorcery\\examples\\SIPExamples\\PlaySounds\\Sounds\\hellowelcome8k.raw";
+        private const string GOODBYE_16K = "G:\\src\\console\\sipsorcery\\examples\\SIPExamples\\PlaySounds\\Sounds\\goodbye16k.raw";
+
 
         public CallManager(SIPCall call, Action<string> appendToLog, IConfiguration configuration)
         {
@@ -50,54 +46,63 @@ namespace SIPServer.Call
 
         public async Task<bool> AnswerAsync()
         {
-            var rtpSession = CreateRtpSession(Call.UA, Call.User);
+            Call.RtpSession = CreateRtpSession();
 
-            await Call.UA.Answer(Call.UAS, rtpSession);
+            await Call.UA.Answer(Call.UAS, Call.RtpSession);
 
             if (Call.UA.IsCallActive)
-                await rtpSession.Start();
+            {
 
+                await Call.RtpSession.Start();
+                //await Call.RtpSession.AudioExtrasSource.StartAudio();
+                AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
+                Call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
+
+                await Call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(GOODBYE_16K, FileMode.Open), AudioSamplingRatesEnum.Rate16KHz);
+
+                //await Call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(WELCOME_8K, FileMode.Open), AudioSamplingRatesEnum.Rate8KHz);
+            }
 
             return true;
         }
-        private VoIPMediaSession CreateRtpSession(SIPUserAgent ua, string dst)
+        private VoIPMediaSession CreateRtpSession()
         {
-            List<AudioCodecsEnum> codecs = new List<AudioCodecsEnum> { AudioCodecsEnum.PCMA };
-            //List<AudioCodecsEnum> codecs = new List<AudioCodecsEnum> { AudioCodecsEnum.PCMU, AudioCodecsEnum.PCMA, AudioCodecsEnum.G722 };
+            List<AudioCodecsEnum> codecs = new List<AudioCodecsEnum> { AudioCodecsEnum.PCMU, AudioCodecsEnum.PCMA, AudioCodecsEnum.G722, AudioCodecsEnum.L16  };
 
-            var audioSource = AudioSourcesEnum.SineWave;
-            if (string.IsNullOrEmpty(dst) || !Enum.TryParse(dst, out audioSource))
-            {
-                audioSource = AudioSourcesEnum.Music;
-            }
+            AudioSourcesEnum audioSource        = AudioSourcesEnum.Silence;
+            AudioSourceOptions audioOptions     = new AudioSourceOptions { AudioSource = audioSource };
+            AudioExtrasSource audioExtrasSource = new AudioExtrasSource(new AudioEncoder());
+
+            audioExtrasSource.RestrictFormats(format => format.Codec == AudioCodecsEnum.PCMA);
+            //audioExtrasSource.RestrictFormats(formats => codecs.Contains(formats.Codec));
+
+            MediaEndPoints mediaEndPoints       = new MediaEndPoints { AudioSource = audioExtrasSource };
+            VoIPMediaSession rtpAudioSession    = new VoIPMediaSession(mediaEndPoints);
+            
+            rtpAudioSession.AcceptRtpFromAny = true;
+            rtpAudioSession.OnRtpPacketReceived +=  OnRtpPacketReceived;
+            rtpAudioSession.OnTimeout +=  OnTimeout;
 
             AppendToLog($"RTP audio session source set to {audioSource}.");
-
-            AudioExtrasSource audioExtrasSource = new AudioExtrasSource(new AudioEncoder(), new AudioSourceOptions { AudioSource = audioSource });
-            audioExtrasSource.RestrictFormats(formats => codecs.Contains(formats.Codec));
-            var rtpAudioSession = new VoIPMediaSession(new MediaEndPoints { AudioSource = audioExtrasSource });
-            rtpAudioSession.AcceptRtpFromAny = true;
-
-            // Wire up the event handler for RTP packets received from the remote party.
-            rtpAudioSession.OnRtpPacketReceived += (ep, type, rtp) => OnRtpPacketReceived(ua, type, rtp);
-            rtpAudioSession.OnTimeout += (mediaType) =>
-            {
-                if (ua?.Dialogue != null)
-                {
-                    AppendToLog($"RTP timeout on call with {ua.Dialogue.RemoteTarget}, hanging up.");
-                }
-                else
-                {
-                    AppendToLog($"RTP timeout on incomplete call, closing RTP session.");
-                }
-
-                ua.Hangup();
-            };
-
+            
             return rtpAudioSession;
         }
 
-        private void OnRtpPacketReceived(SIPUserAgent ua, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
+        private void OnTimeout(SDPMediaTypesEnum mediaType)
+        {
+            if (Call.UA?.Dialogue != null)
+            {
+                AppendToLog($"RTP timeout on call with {Call.UA.Dialogue.RemoteTarget}, hanging up.");
+            }
+            else
+            {
+                AppendToLog($"RTP timeout on incomplete call, closing RTP session.");
+            }
+
+            Call.UA.Hangup();
+        }
+
+        private void OnRtpPacketReceived(IPEndPoint remoteEndPoint, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
             //Stopwatch stopwatch = new Stopwatch();
 

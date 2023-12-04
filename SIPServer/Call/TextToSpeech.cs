@@ -14,6 +14,7 @@ using Windows.Media.Protection.PlayReady;
 using System;
 using System.IO;
 using Google.Protobuf;
+using SIPSorceryMedia.Abstractions;
 
 namespace SIPServer.Call
 {
@@ -50,12 +51,13 @@ namespace SIPServer.Call
 
             AudioConfig = new AudioConfig
             {
-                AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Linear16
+                AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Linear16,
+                SampleRateHertz= 8000
             };
 
         }
 
-        private void PlayByteArray(byte[] byteArray)
+        private void PlayByteArrayToSpeaker(byte[] byteArray)
         {
             using (MemoryStream memoryStream = new MemoryStream(byteArray))
             {
@@ -74,6 +76,20 @@ namespace SIPServer.Call
                     }
                 }
             }
+
+
+        }
+
+        private void PlayByteArray(byte[] byteArray)
+        {
+            //PlayByteArrayToSpeaker(byteArray);
+
+            //AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
+
+
+            MemoryStream memoryStream = new MemoryStream(byteArray);
+            //Call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
+            Call.RtpSession.AudioExtrasSource.SendAudioFromStream(memoryStream, AudioSamplingRatesEnum.Rate8KHz);
 
             Call.IsRunning = false;
         }
@@ -94,7 +110,33 @@ namespace SIPServer.Call
 
                 var response = TTSClient.SynthesizeSpeech(input, Voice, AudioConfig);
 
-                PlayByteArray(response.AudioContent.ToByteArray());
+                string encodedAudioContent = response.AudioContent.ToBase64(); // Your base64-encoded audio content
+                byte[] audioBytes = Convert.FromBase64String(encodedAudioContent);
+
+                //var audioContent = response.AudioContent.ToString();
+                //byte[] audioBytes = Convert.FromBase64String(audioContent);
+
+                //// Assuming the audio is in WAV format
+                //using (MemoryStream mp3Stream = new MemoryStream(audioBytes))
+                //{
+                //    using (WaveStream waveStream = new WaveFileReader(mp3Stream))
+                //    {
+                //        // Convert to PCM format
+                //        WaveFormat pcmFormat = new WaveFormat(waveStream.WaveFormat.SampleRate, 16, waveStream.WaveFormat.Channels);
+                //        using (WaveStream pcmStream = new WaveFormatConversionStream(pcmFormat, waveStream))
+                //        {
+                //            // Write the PCM data to a file
+                //            string outputFile = "output.raw";
+                //            using (FileStream fileStream = new FileStream(outputFile, FileMode.Create))
+                //            {
+                //                pcmStream.CopyTo(fileStream);
+                //            }
+                //        }
+                //    }
+                //}
+
+                //PlayByteArray(response.AudioContent.ToByteArray());
+                PlayByteArray(audioBytes);
 
                 ////Call.ResponseAudio.Add(response.AudioContent.)
                 //using (Stream output = File.Create("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output1.mp3"))
@@ -113,16 +155,6 @@ namespace SIPServer.Call
 
 
         }
-
-    }
-}
-
-
-
-namespace TextToSpeechConsoleApp
-{
-    class Program
-    {
 
     }
 }

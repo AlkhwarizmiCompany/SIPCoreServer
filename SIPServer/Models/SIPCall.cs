@@ -1,4 +1,5 @@
 ﻿using NAudio.Wave;
+using SIPSorcery.Media;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
 using Windows.Media.SpeechRecognition;
@@ -10,7 +11,7 @@ namespace SIPServer.Models
         public string User { get; set; }
         public SIPUserAgent UA { get; set; }
         public SIPServerUserAgent UAS { get; set; }
-
+        public VoIPMediaSession RtpSession { get; set; }
         public BlockingCollection<byte[]> CallAudio         { get; set; }
         public BlockingCollection<string> TranscriptedText  { get; set; }
         public BlockingCollection<string> ChatbotAnswers    { get; set; }
@@ -39,6 +40,7 @@ namespace SIPServer.Models
             WaveFile = new WaveFileWriter("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output5.mp3", _waveFormat);
             
             pcmSamples = new byte[0];
+            RtpSession = null;
         }
     }
 }
