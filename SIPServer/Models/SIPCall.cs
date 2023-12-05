@@ -1,14 +1,15 @@
 ﻿using NAudio.Wave;
 using SIPSorcery.Media;
+using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
-using Windows.Media.SpeechRecognition;
 
 namespace SIPServer.Models
 {
     class SIPCall
     {
         public string User { get; set; }
+        public SIPRequest SipRequest { get; set; }
         public SIPUserAgent UA { get; set; }
         public SIPServerUserAgent UAS { get; set; }
         public VoIPMediaSession RtpSession { get; set; }
@@ -23,12 +24,16 @@ namespace SIPServer.Models
 
         private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
 
+        public Logger logger;
+        private readonly Action<string> AppendToLog;
 
-        public SIPCall(SIPUserAgent ua, SIPServerUserAgent uas, string user)
+        public SIPCall(SIPUserAgent ua, SIPServerUserAgent uas, SIPRequest sipRequest, Action<string> appendToLog)
         {
             UA = ua;
             UAS = uas;
-            User = user;
+            SipRequest = sipRequest;
+            User = sipRequest.URI.User;
+            AppendToLog = appendToLog;
 
             CallAudio           = new BlockingCollection<byte[]>();
             TranscriptedText    = new BlockingCollection<string>();
@@ -38,9 +43,48 @@ namespace SIPServer.Models
             IsRunning = false;
 
             WaveFile = new WaveFileWriter("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output5.mp3", _waveFormat);
-            
+
+            logger = new Logger("mongodb://localhost:27017", "SIP", "CallLogs");
+
             pcmSamples = new byte[0];
             RtpSession = null;
+        }
+        
+        private LogEntry GetEntry(string msg)
+        {
+            LogEntry entry = new LogEntry();
+            entry.message = msg;
+            entry.timestamp = DateTime.UtcNow;
+
+            AppendToLog(msg);
+
+            return entry;
+        }
+        public void Log(string msg)
+        {
+
+            logger.Log(SipRequest.RemoteSIPEndPoint.ToString(), GetEntry(msg));
+        }
+
+        public void InitCallLog(string msg)
+        {
+            LogDocument logDocument = new LogDocument();
+
+            logDocument.callId = SipRequest.RemoteSIPEndPoint.ToString();
+            //logDocument.from = UA.CallDescriptor.From;
+            //logDocument.to = UA.CallDescriptor.To;
+            //logDocument.uri = UA.CallDescriptor.Uri;
+
+            logDocument.Remote.protocol = SipRequest.RemoteSIPEndPoint.Protocol.ToString();
+            logDocument.Remote.address = SipRequest.RemoteSIPEndPoint.Address.ToString();
+            logDocument.Remote.port = SipRequest.RemoteSIPEndPoint.Port;
+            logDocument.Remote.channelID = SipRequest.RemoteSIPEndPoint.ChannelID;
+            logDocument.Remote.connectionID = SipRequest.RemoteSIPEndPoint.ConnectionID;
+
+
+            logDocument.logs.Add(GetEntry(msg));
+
+            logger.CreateLogDocument(logDocument);
         }
     }
 }

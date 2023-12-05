@@ -4,44 +4,55 @@ using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPServer.Models;
 using SIPServer.Call;
-using System.Text;
 using Microsoft.Extensions.Configuration;
-using System.Configuration;
-using Org.BouncyCastle.Asn1.Ocsp;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SIPServer
 {
-
     class Server
     {
-        private static int SIP_LISTEN_PORT = 5060;
-        private readonly SIPTransport SipTransport;
+        private int SIP_LISTEN_PORT;
+        private SIPTransport SipTransport;
 
 
-        private ConcurrentDictionary<string, SIPRegisterAccount> Registrations;
-        private ConcurrentDictionary<string, SIPCall> AcceptedCalls;
-        private ConcurrentDictionary<string, SIPCall> ActiveCalls;
+        private ConcurrentDictionary<string, SIPRegisterAccount>    Registrations;
+        private ConcurrentDictionary<string, SIPCall>               AcceptedCalls;
+        private ConcurrentDictionary<string, SIPCall>               ActiveCalls;
 
-        private Action<string> AppendToLog;
-        IConfigurationRoot Configuration;
+        private readonly IConfiguration _configuration;
+        private readonly IServiceProvider _serviceProvider;
         string callId;
-        public Server(Action<string> appendToLog, IConfigurationRoot configuration)
-        {
-            AppendToLog = appendToLog; // Store the logging action
-            Configuration = configuration;
+        private readonly Action<string> _appendToLog;
 
+        public Server(IConfiguration configuration, IServiceProvider serviceProvider, Action<string> AppendToLog)
+        {
+            _configuration = configuration;
+            _serviceProvider = serviceProvider;
+            _appendToLog = AppendToLog;
+
+            if (!int.TryParse(_configuration["port"], out SIP_LISTEN_PORT))
+                SIP_LISTEN_PORT = 5060; // default value
+            
+            Registrations   = new ConcurrentDictionary<string, SIPRegisterAccount>();
+            AcceptedCalls   = new ConcurrentDictionary<string, SIPCall>();
+            ActiveCalls     = new ConcurrentDictionary<string, SIPCall>();
+
+
+            var credPath = _configuration["GoogleAppCredentials"];
+            
+            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credPath);
+        }
+
+        public void Start()
+        {
             SipTransport = new SIPTransport();
             SipTransport.AddSIPChannel(new SIPUDPChannel(new IPEndPoint(IPAddress.Any, SIP_LISTEN_PORT)));
 
             //SipTransport.EnableTraceLogs();
 
             SipTransport.SIPTransportRequestReceived += OnRequest;
-
-
-            Registrations = new ConcurrentDictionary<string, SIPRegisterAccount>();
-            AcceptedCalls = new ConcurrentDictionary<string, SIPCall>();
-            ActiveCalls = new ConcurrentDictionary<string, SIPCall>();
         }
+
 
         public async Task AnswerCall(string user)
         {
@@ -51,18 +62,20 @@ namespace SIPServer
             if (!AcceptedCalls.TryGetValue(user, out call))
                 return;
 
-            CallManager CallManager = new CallManager(call, AppendToLog, Configuration);
+            CallManager CallManager = ActivatorUtilities.CreateInstance<CallManager>(_serviceProvider, call);
 
             ret = await CallManager.AnswerAsync();
 
             if (!ret)
-                AppendToLog($"Call Not Answerd: from {call.UA.ContactURI}");
+                call.Log($"Call Not Answerd: from {call.UA.ContactURI}");
 
             callId = call.UA.Dialogue.CallId;
 
             ActiveCalls.TryAdd(call.UA.Dialogue.CallId, call);
-            AppendToLog($"Call Answerd: from {call.UA.ContactURI}");
+           
+            call.Log($"Call Answerd: from {call.UA.ContactURI}");
         }
+
         public async Task EndCall(string CallId)
         {
             SIPCall call;
@@ -72,13 +85,14 @@ namespace SIPServer
             if (ActiveCalls.TryGetValue(CallId, out call))
             {
                 call.UA.Hangup();
-                AppendToLog($"Call ended.");
+                call.Log($"Call ended.");
             }
             else
             {
-                AppendToLog($"No active call with user {call.User} found.");
+                call.Log($"No active call with user {call.User} found.");
             }
         }
+
 
         private async Task OnRequest(SIPEndPoint localSIPEndPoint, SIPEndPoint remoteEndPoint, SIPRequest sipRequest)
         {
@@ -93,21 +107,21 @@ namespace SIPServer
 
                 if (sipRequest.Method == SIPMethodsEnum.INVITE)
                 {
-                    AppendToLog($"Incoming call request: {sipRequest.URI}.");
-
                     SIPUserAgent ua = new SIPUserAgent(SipTransport, null);
                     ua.OnCallHungup += OnHangup;
 
                     var uas = ua.AcceptCall(sipRequest);
 
-                    AcceptedCalls.TryAdd($"{user.Username}@{user.Domain}", new SIPCall(ua, uas, sipRequest.URI.User));
+                    SIPCall call = new SIPCall(ua, uas, sipRequest, _appendToLog);
+
+                    AcceptedCalls.TryAdd($"{user.Username}@{user.Domain}", call);
+
+                    call.InitCallLog($"Incoming call request: {sipRequest.URI}.");
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.BYE)
                 {
                     SIPResponse byeResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.CallLegTransactionDoesNotExist, null);
                     await SipTransport.SendResponseAsync(byeResponse);
-                    AppendToLog($"Call Ended");
-
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.SUBSCRIBE)
                 {
@@ -121,13 +135,11 @@ namespace SIPServer
 
                     SIPResponse optionsResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.Ok, null);
                     await SipTransport.SendResponseAsync(optionsResponse);
-                    AppendToLog($"Registration received: {user.Username}@{user.Domain}");
-
                 }
             }
             catch (Exception reqExcp)
             {
-                AppendToLog($"Exception handling {sipRequest.Method}. {reqExcp.Message}");
+                //call.Log($"Exception handling {sipRequest.Method}. {reqExcp.Message}");
             }
         }
 

@@ -1,39 +1,23 @@
 ﻿using Google.Cloud.Speech.V1;
 using NAudio.Wave;
-using System;
-using System.Collections.Concurrent;
-using System.Threading;
-using System.Threading.Tasks;
 using Google.Cloud.TextToSpeech.V1;
-
-using static Google.Cloud.Speech.V1.RecognitionConfig.Types;
 using System.IO;
 using SIPServer.Models;
-using static System.Net.Mime.MediaTypeNames;
-using Windows.Media.Protection.PlayReady;
-using System;
-using System.IO;
-using Google.Protobuf;
 using SIPSorceryMedia.Abstractions;
+using Microsoft.Extensions.Configuration;
 
 namespace SIPServer.Call
 {
 
-    class TextToSpeech
+    class TextToSpeech : KHService
     {
 
-        private SIPCall        Call;
-        private readonly Action<string> AppendToLog;
+        private TextToSpeechClient      _TTSClient;
+        private VoiceSelectionParams    _voice;
+        private AudioConfig             _audioConfig;
 
-        private TextToSpeechClient      TTSClient;
-        private VoiceSelectionParams    Voice;
-        private AudioConfig             AudioConfig;
-
-        public TextToSpeech(SIPCall call, Action<string> appendToLog)
+        public TextToSpeech(IConfiguration configuration, SIPCall call) : base(configuration, call)
         {
-
-            Call = call;
-            AppendToLog = appendToLog;
 
             Initialization();
         }
@@ -41,15 +25,15 @@ namespace SIPServer.Call
 
         public void Initialization()
         {
-            TTSClient = TextToSpeechClient.Create();
+            _TTSClient = TextToSpeechClient.Create();
 
-            Voice = new VoiceSelectionParams
+            _voice = new VoiceSelectionParams
             {
                 LanguageCode = LanguageCodes.Arabic.Egypt,
-                SsmlGender = SsmlVoiceGender.Female
+                SsmlGender = SsmlVoiceGender.Male
             };
 
-            AudioConfig = new AudioConfig
+            _audioConfig = new AudioConfig
             {
                 AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Linear16,
                 SampleRateHertz= 8000
@@ -88,17 +72,17 @@ namespace SIPServer.Call
 
 
             MemoryStream memoryStream = new MemoryStream(byteArray);
-            //Call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
-            Call.RtpSession.AudioExtrasSource.SendAudioFromStream(memoryStream, AudioSamplingRatesEnum.Rate8KHz);
+            //_call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
+            _call.RtpSession.AudioExtrasSource.SendAudioFromStream(memoryStream, AudioSamplingRatesEnum.Rate8KHz);
 
-            Call.IsRunning = false;
+            _call.IsRunning = false;
         }
 
-        public void TTS()
+        public override void main()
         {
-            while(true)
+            while (!cancellationTokenSource.IsCancellationRequested)
             {
-                string ChatbotResponse = Call.ChatbotAnswers.Take(); // Blocking call
+                string ChatbotResponse = _call.ChatbotAnswers.Take(); // Blocking call
 
                 if (string.IsNullOrEmpty(ChatbotResponse))
                     continue;
@@ -107,8 +91,15 @@ namespace SIPServer.Call
                 {
                     Text = ChatbotResponse
                 };
+                // hash ChatbotResponse
+                // check cache 
 
-                var response = TTSClient.SynthesizeSpeech(input, Voice, AudioConfig);
+                //if(cache miss):
+                // google tts
+                //if(chach hit)
+                //retrive from disk
+
+                var response = _TTSClient.SynthesizeSpeech(input, _voice, _audioConfig);
 
                 string encodedAudioContent = response.AudioContent.ToBase64(); // Your base64-encoded audio content
                 byte[] audioBytes = Convert.FromBase64String(encodedAudioContent);
@@ -138,7 +129,7 @@ namespace SIPServer.Call
                 //PlayByteArray(response.AudioContent.ToByteArray());
                 PlayByteArray(audioBytes);
 
-                ////Call.ResponseAudio.Add(response.AudioContent.)
+                ////_call.ResponseAudio.Add(response.AudioContent.)
                 //using (Stream output = File.Create("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output1.mp3"))
                 //{
                 //    response.AudioContent.WriteTo(output);
@@ -147,14 +138,6 @@ namespace SIPServer.Call
             }
         }
 
-        public async Task Run()
-        {
-
-            Thread thread = new Thread(new ThreadStart(TTS));
-            thread.Start();
-
-
-        }
 
     }
 }

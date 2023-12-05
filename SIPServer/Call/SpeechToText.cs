@@ -1,8 +1,7 @@
 ﻿using Google.Api.Gax.Grpc;
 using Google.Cloud.Speech.V1;
+using Microsoft.Extensions.Configuration;
 using SIPServer.Models;
-using System.Collections.Concurrent;
-using System.Threading.Tasks;
 
 namespace SIPServer.Call
 {
@@ -10,14 +9,16 @@ namespace SIPServer.Call
     {
         private SpeechClient.StreamingRecognizeStream streamingCall;
 
-        private SIPCall Call;
-        private readonly Action<string> AppendToLog;
+        private SIPCall _call;
+        private readonly IConfiguration _configuration;
+        
         private CancellationTokenSource cancellationTokenSource;
 
-        public SpeechToText(SIPCall call, Action<string> appendToLog)
+        public SpeechToText(IConfiguration configuration, SIPCall call)
         {
-            Call = call;
-            AppendToLog = appendToLog;
+            _call = call;
+            _configuration = configuration;
+            
             cancellationTokenSource = new CancellationTokenSource();
 
             // Initialize asynchronously
@@ -70,22 +71,22 @@ namespace SIPServer.Call
                         text = result.Alternatives[0].Transcript;
 
 
-                        if (!Call.IsRunning)
+                        if (!_call.IsRunning)
                         {
-                            AppendToLog($"Transcript Added: {text}");
+                            _call.Log($"Transcript Added: {text}");
 
-                            Call.TranscriptedText.Add(text);
-                            Call.IsRunning = true;
+                            _call.TranscriptedText.Add(text);
+                            _call.IsRunning = true;
                         }
                         else
-                            AppendToLog($"Transcript Not Added: {text}");
+                            _call.Log($"Transcript Not Added: {text}");
 
                     }
                 }
             }
             catch (Exception e)
             {
-                AppendToLog($"Exception: {e}");
+                _call.Log($"Exception: {e}");
             }
         }
 
@@ -95,7 +96,7 @@ namespace SIPServer.Call
             {
                 while (!cancellationTokenSource.IsCancellationRequested)
                 {
-                    byte[] buffer = Call.CallAudio.Take(); 
+                    byte[] buffer = _call.CallAudio.Take(); 
 
                     if (buffer.Length > 0)
                     {
@@ -108,7 +109,7 @@ namespace SIPServer.Call
             }
             catch (OperationCanceledException)
             {
-                AppendToLog("Streaming was canceled.");
+                _call.Log("Streaming was canceled.");
             }
             finally
             {

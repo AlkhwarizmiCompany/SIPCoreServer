@@ -1,8 +1,11 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using MongoDB.Driver.Core.Servers;
 using SIPServer.Models;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorceryMedia.Abstractions;
+using System.Configuration;
 using System.IO;
 using System.Net;
 
@@ -10,57 +13,54 @@ namespace SIPServer.Call
 {
     class CallManager
     {
-        private readonly SpeechToText   STT;
-        private readonly TextToSpeech   TTS;
-        private readonly Chatbot        Chatbot;
-        private readonly MicAudio       MicAudio;
+        private readonly SpeechToText   _STT;
+        private readonly TextToSpeech   _TTS;
+        private readonly Chatbot        _chatbot;
+        private readonly MicAudio       _micAudio;
 
-        private SIPCall                 Call;
 
-        private readonly Action<string> AppendToLog;
-        IConfigurationRoot              configuration;
-
+        private SIPCall                 _call;
+        private readonly IConfiguration _configuration;
+        private readonly IServiceProvider _serviceProvider;
 
         private const string WELCOME_8K = "G:\\src\\console\\sipsorcery\\examples\\SIPExamples\\PlaySounds\\Sounds\\hellowelcome8k.raw";
         private const string GOODBYE_16K = "G:\\src\\console\\sipsorcery\\examples\\SIPExamples\\PlaySounds\\Sounds\\goodbye16k.raw";
 
 
-        public CallManager(SIPCall call, Action<string> appendToLog, IConfiguration configuration)
+        public CallManager(IConfiguration configuration, IServiceProvider serviceProvider, SIPCall call)
         {
-            var cred = configuration["GoogleAppCredentials"];
 
-            Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\tensile-axiom-281814-5428b0b1f7b0.json");
 
-            Call        = call;
-            AppendToLog = appendToLog;
-
+            _call = call;
+            _configuration = configuration;
+            _serviceProvider = serviceProvider;
 
             //MicAudio        = new MicAudio(Call, AppendToLog);
-            STT             = new SpeechToText(Call, AppendToLog);
-            Chatbot         = new Chatbot(Call, AppendToLog);
-            TTS             = new TextToSpeech(Call, AppendToLog);
+            _STT = new SpeechToText(_configuration, _call);
+            _chatbot = ActivatorUtilities.CreateInstance<Chatbot>(_serviceProvider, _call);
+            _TTS = ActivatorUtilities.CreateInstance<TextToSpeech>(_serviceProvider, _call);
 
-            Chatbot.Run();
-            TTS.Run();
+            _chatbot.Start();
+            _TTS.Start();
         }
 
         public async Task<bool> AnswerAsync()
         {
-            Call.RtpSession = CreateRtpSession();
+            _call.RtpSession = CreateRtpSession();
 
-            await Call.UA.Answer(Call.UAS, Call.RtpSession);
+            await _call.UA.Answer(_call.UAS, _call.RtpSession);
 
-            if (Call.UA.IsCallActive)
+            if (_call.UA.IsCallActive)
             {
 
-                await Call.RtpSession.Start();
-                //await Call.RtpSession.AudioExtrasSource.StartAudio();
-                AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
-                Call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
+                await _call.RtpSession.Start();
+                //await _call.RtpSession.AudioExtrasSource.StartAudio();
+                //AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
+                //_call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
 
-                await Call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(GOODBYE_16K, FileMode.Open), AudioSamplingRatesEnum.Rate16KHz);
+                //await _call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(GOODBYE_16K, FileMode.Open), AudioSamplingRatesEnum.Rate16KHz);
 
-                //await Call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(WELCOME_8K, FileMode.Open), AudioSamplingRatesEnum.Rate8KHz);
+                //await _call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(WELCOME_8K, FileMode.Open), AudioSamplingRatesEnum.Rate8KHz);
             }
 
             return true;
@@ -83,23 +83,23 @@ namespace SIPServer.Call
             rtpAudioSession.OnRtpPacketReceived +=  OnRtpPacketReceived;
             rtpAudioSession.OnTimeout +=  OnTimeout;
 
-            AppendToLog($"RTP audio session source set to {audioSource}.");
+            _call.Log($"RTP audio session source set to {audioSource}.");
             
             return rtpAudioSession;
         }
 
         private void OnTimeout(SDPMediaTypesEnum mediaType)
         {
-            if (Call.UA?.Dialogue != null)
+            if (_call.UA?.Dialogue != null)
             {
-                AppendToLog($"RTP timeout on call with {Call.UA.Dialogue.RemoteTarget}, hanging up.");
+                _call.Log($"RTP timeout on call with {_call.UA.Dialogue.RemoteTarget}, hanging up.");
             }
             else
             {
-                AppendToLog($"RTP timeout on incomplete call, closing RTP session.");
+                _call.Log($"RTP timeout on incomplete call, closing RTP session.");
             }
 
-            Call.UA.Hangup();
+            _call.UA.Hangup();
         }
 
         private void OnRtpPacketReceived(IPEndPoint remoteEndPoint, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
@@ -122,13 +122,13 @@ namespace SIPServer.Call
                         pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
 
                     byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                    //Call.WaveFile.Write(pcmSample, 0, 2);
-                    Call.pcmSamples = Call.pcmSamples.Concat(pcmSample).ToArray();
+                    //_call.WaveFile.Write(pcmSample, 0, 2);
+                    _call.pcmSamples = _call.pcmSamples.Concat(pcmSample).ToArray();
 
-                    if (Call.pcmSamples.Length >= 1600)
+                    if (_call.pcmSamples.Length >= 1600)
                     {
-                        Call.CallAudio.Add(Call.pcmSamples);
-                        Call.pcmSamples = new byte[0];
+                        _call.CallAudio.Add(_call.pcmSamples);
+                        _call.pcmSamples = new byte[0];
                     }
                 }
             }

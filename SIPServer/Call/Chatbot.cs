@@ -5,6 +5,8 @@ using System.Text;
 using SIPServer.Models;
 using Google.Cloud.TextToSpeech.V1;
 using System.Windows.Forms;
+using Microsoft.Extensions.Configuration;
+using System.Xml.Linq;
 
 namespace SIPServer.Call
 {
@@ -17,30 +19,31 @@ namespace SIPServer.Call
         public bool voice { get; set; }
     }
 
-    class Chatbot
+    class Chatbot: KHService
     {
         private readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        private readonly string _api = "https://orchestrator.alkhwarizmi.xyz/api/BotConnector";
 
-        private SIPCall Call;
-        private readonly Action<string> AppendToLog;
+        private readonly string API;
+        private readonly string BOT_ID;
+        private readonly string USER_ID;
+
+        private string _sessionId = "VoiceBot";
         
-        private string BotId = "171";
-        private string UserId = "VoiceBot";
-        private string SessionId = "VoiceBot";
-        
-        public Chatbot(SIPCall call, Action<string> appendToLog)
+        public Chatbot(IConfiguration configuration, SIPCall call): base(configuration, call)
         {
-            Call = call;
-            AppendToLog = appendToLog;
+
+            API = _configuration["Api"] != null ? _configuration["Api"] : "https://orchestrator.alkhwarizmi.xyz/api/BotConnector";
+            BOT_ID = _configuration["BotId"] != null ? _configuration["BotId"]: "171";
+            USER_ID = _configuration["UserId"] != null ? _configuration["UserId"] : "VoiceBot";
+
         }
 
-        public async Task<string> Ask(string input)
+        public string Ask(string input)
         {
 
             try
             {
-                AskRequest askRequest = new AskRequest { id = BotId, userId = UserId, message = input, sessionId = SessionId, voice=true };
+                AskRequest askRequest = new AskRequest { id = BOT_ID, userId = USER_ID, message = input, sessionId = _sessionId, voice=true };
 
                 var content = new StringContent(
                     JsonConvert.SerializeObject(askRequest),
@@ -49,11 +52,11 @@ namespace SIPServer.Call
                 );
 
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                var response = await _httpClient.PostAsync($"{_api}/Ask", content);
+                var response = _httpClient.PostAsync($"{API}/Ask", content).GetAwaiter().GetResult(); ;
                 if (!response.IsSuccessStatusCode)
                     return "عذرا حدث خطأ فى الاتصال";
 
-                string responseString = await response.Content.ReadAsStringAsync();
+                string responseString = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 return responseString;
 
             }
@@ -69,7 +72,7 @@ namespace SIPServer.Call
             // Deserialize JSON string to dynamic object
             dynamic bodyJson = JsonConvert.DeserializeObject(response);
 
-            SessionId = (string)bodyJson.sessionId;
+            _sessionId = (string)bodyJson.sessionId;
 
             List<string> output = new List<string>();
 
@@ -138,31 +141,21 @@ namespace SIPServer.Call
             return diac_output;
         }
 
-        public async Task AskChatbotAsync()
+        public override void main()
         {
-            while (true)
+            while (!cancellationTokenSource.IsCancellationRequested)
             {
-                string input = Call.TranscriptedText.Take(); // Blocking call
+                string input = _call.TranscriptedText.Take(); // Blocking call
 
-                string response = await Ask(input);
+                string response = Ask(input);
 
-                response = GetResponses(response);  
-                AppendToLog(response);
+                response = GetResponses(response);
+                _call.Log(response);
 
-                Call.ChatbotAnswers.Add(response);
+                _call.ChatbotAnswers.Add(response);
             }
         }
 
-        //public async Task Run()
-        //{
-        //    Thread thread = new Thread(new ThreadStart(AskChatbotAsync));
-        //    thread.Start();
-        //}
-
-        public async Task Run()
-        {
-            await Task.Run(async () => await AskChatbotAsync());
-        }
 
     }
 
