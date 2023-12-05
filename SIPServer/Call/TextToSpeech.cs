@@ -36,7 +36,7 @@ namespace SIPServer.Call
             _audioConfig = new AudioConfig
             {
                 AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Linear16,
-                SampleRateHertz= 8000
+                SampleRateHertz= 16000
             };
 
         }
@@ -73,7 +73,7 @@ namespace SIPServer.Call
 
             MemoryStream memoryStream = new MemoryStream(byteArray);
             //_call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
-            _call.RtpSession.AudioExtrasSource.SendAudioFromStream(memoryStream, AudioSamplingRatesEnum.Rate8KHz);
+            _call.RtpSession.AudioExtrasSource.SendAudioFromStream(memoryStream, AudioSamplingRatesEnum.Rate16KHz);
 
             _call.IsRunning = false;
         }

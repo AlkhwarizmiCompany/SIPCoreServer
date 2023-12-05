@@ -143,5 +143,17 @@ namespace SIPServer.Call
             //AppendToLog($"milliseconds: {milliseconds}");
         }
 
+        public void Stop()
+        {
+            _call.UA.Hangup();
+            _call.RtpSession.Close("");
+
+            _STT.Stop();
+            _chatbot.Stop();
+            _TTS.Stop();
+
+            _call.Log($"Call ended.");
+
+        }
     }
 }

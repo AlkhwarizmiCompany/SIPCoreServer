@@ -71,7 +71,7 @@ namespace SIPServer.Call
                         text = result.Alternatives[0].Transcript;
 
 
-                        if (!_call.IsRunning)
+                        if (!_call.IsRunning && !string.IsNullOrEmpty(text))
                         {
                             _call.Log($"Transcript Added: {text}");
 

@@ -10,6 +10,7 @@ using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorceryMedia.Abstractions;
+using System.Collections.ObjectModel;
 using System.Configuration;
 using System.IO;
 using System.Net;
@@ -37,14 +38,19 @@ namespace SIPServer
         private readonly IConfiguration _configuration;
         private readonly IServiceProvider _serviceProvider;
 
-       
+        public ObservableCollection<string> calls { get; set; } = new ObservableCollection<string>()
+        {
+            "call1",
+            "call2",
+        };
+
         public MainWindow(IConfiguration configuration, IServiceProvider serviceProvider)
         {
             _configuration = configuration;
             _serviceProvider = serviceProvider; 
 
             //_server = _serviceProvider.GetService<Server>();
-            _server = ActivatorUtilities.CreateInstance<Server>(_serviceProvider, AppendToLog);
+            _server = ActivatorUtilities.CreateInstance<Server>(_serviceProvider, AppendToLog, calls);
 
             _server.Start();
 
@@ -70,7 +76,7 @@ namespace SIPServer
 
         private void Answer_Call(object sender, RoutedEventArgs e)
         {
-            _server.AnswerCall("thisis@xyz");
+            _server.AnswerCall("");
 
         }
 

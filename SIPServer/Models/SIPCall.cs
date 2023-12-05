@@ -19,10 +19,7 @@ namespace SIPServer.Models
         public BlockingCollection<byte[]> ResponseAudio     { get; set; }
 
         public bool IsRunning { get; set; }
-        public WaveFileWriter WaveFile;
         public byte[] pcmSamples;
-
-        private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
 
         public Logger logger;
         private readonly Action<string> AppendToLog;
@@ -32,7 +29,7 @@ namespace SIPServer.Models
             UA = ua;
             UAS = uas;
             SipRequest = sipRequest;
-            User = sipRequest.URI.User;
+            User = sipRequest.RemoteSIPEndPoint.ToString();
             AppendToLog = appendToLog;
 
             CallAudio           = new BlockingCollection<byte[]>();
@@ -42,7 +39,6 @@ namespace SIPServer.Models
 
             IsRunning = false;
 
-            WaveFile = new WaveFileWriter("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output5.mp3", _waveFormat);
 
             logger = new Logger("mongodb://localhost:27017", "SIP", "CallLogs");
 

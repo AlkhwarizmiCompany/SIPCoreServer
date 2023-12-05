@@ -6,6 +6,8 @@ using SIPServer.Models;
 using SIPServer.Call;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Collections.ObjectModel;
+using System.Windows.Input;
 
 namespace SIPServer
 {
@@ -17,25 +19,27 @@ namespace SIPServer
 
         private ConcurrentDictionary<string, SIPRegisterAccount>    Registrations;
         private ConcurrentDictionary<string, SIPCall>               AcceptedCalls;
-        private ConcurrentDictionary<string, SIPCall>               ActiveCalls;
+        private ConcurrentDictionary<string, CallManager>               ActiveCalls;
 
         private readonly IConfiguration _configuration;
         private readonly IServiceProvider _serviceProvider;
         string callId;
         private readonly Action<string> _appendToLog;
+        private ObservableCollection<string> _items;
 
-        public Server(IConfiguration configuration, IServiceProvider serviceProvider, Action<string> AppendToLog)
+        public Server(IConfiguration configuration, IServiceProvider serviceProvider, Action<string> AppendToLog, ObservableCollection<string> Items)
         {
             _configuration = configuration;
             _serviceProvider = serviceProvider;
             _appendToLog = AppendToLog;
+            _items = Items;
 
             if (!int.TryParse(_configuration["port"], out SIP_LISTEN_PORT))
                 SIP_LISTEN_PORT = 5060; // default value
             
             Registrations   = new ConcurrentDictionary<string, SIPRegisterAccount>();
             AcceptedCalls   = new ConcurrentDictionary<string, SIPCall>();
-            ActiveCalls     = new ConcurrentDictionary<string, SIPCall>();
+            ActiveCalls     = new ConcurrentDictionary<string, CallManager>();
 
 
             var credPath = _configuration["GoogleAppCredentials"];
@@ -59,38 +63,59 @@ namespace SIPServer
             SIPCall call;
             bool ret = false;
 
-            if (!AcceptedCalls.TryGetValue(user, out call))
+            if (AcceptedCalls.Count <= 0)
                 return;
+
+            if (string.IsNullOrEmpty(user))
+            {
+
+                var Key = AcceptedCalls.ElementAt(0).Key;
+
+                if (!AcceptedCalls.TryRemove(Key, out call))
+                    return;
+            }
+            else
+            {
+
+                if (!AcceptedCalls.TryGetValue(user, out call))
+                   return;
+            }
 
             CallManager CallManager = ActivatorUtilities.CreateInstance<CallManager>(_serviceProvider, call);
 
             ret = await CallManager.AnswerAsync();
 
             if (!ret)
-                call.Log($"Call Not Answerd: from {call.UA.ContactURI}");
+                call.Log($"Call Not Answerd: from {call.User}");
 
             callId = call.UA.Dialogue.CallId;
 
-            ActiveCalls.TryAdd(call.UA.Dialogue.CallId, call);
+            ActiveCalls.TryAdd(call.UA.Dialogue.CallId, CallManager);
            
-            call.Log($"Call Answerd: from {call.UA.ContactURI}");
+            call.Log($"Call Answerd: from {call.User}");
         }
 
-        public async Task EndCall(string CallId)
+        public async Task EndCall(string user)
         {
-            SIPCall call;
+            CallManager CallManager;
             
-            CallId = callId;
 
-            if (ActiveCalls.TryGetValue(CallId, out call))
+            if (string.IsNullOrEmpty(user))
             {
-                call.UA.Hangup();
-                call.Log($"Call ended.");
+
+                var Key = ActiveCalls.ElementAt(0).Key;
+
+                if (!ActiveCalls.TryRemove(Key, out CallManager))
+                    return;
             }
             else
             {
-                call.Log($"No active call with user {call.User} found.");
+
+                if (!ActiveCalls.TryGetValue(user, out CallManager))
+                    return;
             }
+
+            CallManager.Stop();
         }
 
 
@@ -100,7 +125,7 @@ namespace SIPServer
             {
                 SIPRegisterAccount user;
 
-                user.Username = sipRequest.Header.From.FromURI.User;
+                user.Username = sipRequest.RemoteSIPEndPoint.ToString();
                 user.Password = "xxx";
                 user.Expiry = 1;
                 user.Domain = "xyz";
@@ -114,9 +139,11 @@ namespace SIPServer
 
                     SIPCall call = new SIPCall(ua, uas, sipRequest, _appendToLog);
 
-                    AcceptedCalls.TryAdd($"{user.Username}@{user.Domain}", call);
+                    AcceptedCalls.TryAdd($"{call.User}", call);
 
-                    call.InitCallLog($"Incoming call request: {sipRequest.URI}.");
+                    call.InitCallLog($"Incoming call request: {call.User}.");
+
+                    //AnswerCall(call.User);
                 }
                 else if (sipRequest.Method == SIPMethodsEnum.BYE)
                 {
@@ -145,19 +172,16 @@ namespace SIPServer
 
         private void OnHangup(SIPDialogue dialogue)
         {
-            SIPCall call;
+            CallManager CallManager;
 
             if (dialogue != null)
             {
                 string callID = dialogue.CallId;
                 if (ActiveCalls.ContainsKey(callID))
                 {
-                    if (ActiveCalls.TryRemove(callID, out call))
+                    if (ActiveCalls.TryRemove(callID, out CallManager))
                     {
-                        // This app only uses each SIP user agent once so here the agent is 
-                        // explicitly closed to prevent is responding to any new SIP requests.
-                        call.UA.Close();
-                        call.WaveFile.Close();
+                        CallManager.Stop();
                     }
                 }
             }
