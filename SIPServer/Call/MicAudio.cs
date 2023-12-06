@@ -1,32 +1,18 @@
-﻿using NAudio.Wave;
+﻿using Microsoft.Extensions.Configuration;
+using NAudio.Wave;
 using SIPServer.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SIPServer.Call
 {
-    class MicAudio
+    class MicAudio : KHService
     {
-        private SIPCall Call;
-        private readonly Action<string> AppendToLog;
-
-        private bool isRecording = false;
         private WaveInEvent waveIn;
-
-        public MicAudio(SIPCall call, Action<string> appendToLog)
+        public MicAudio(IConfiguration configuration, SIPCall call) : base(configuration, call)
         {
 
-            Call = call;
-            AppendToLog = appendToLog;
-
-            Initialization();
         }
 
-
-        public void Initialization()
+        public override async Task Initialization()
         {
 
             // Configure microphone input
@@ -38,11 +24,23 @@ namespace SIPServer.Call
             {
                 var samples = e.Buffer.Clone() as byte[];
 
-                Call.CallAudio.Add(samples);
+                _call.CallAudio.Add(samples);
             };
 
-            waveIn.StartRecording();
         }
+
+        public override void main()
+        {
+            waveIn.StartRecording();
+
+            while (!_cancellationTokenSource.IsCancellationRequested)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+
+            waveIn.StopRecording();
+        }
+
     }
 }
 

@@ -143,7 +143,7 @@ namespace SIPServer.Call
 
         public override void main()
         {
-            while (!cancellationTokenSource.IsCancellationRequested)
+            while (!_cancellationTokenSource.IsCancellationRequested)
             {
                 string input = _call.TranscriptedText.Take(); // Blocking call
 

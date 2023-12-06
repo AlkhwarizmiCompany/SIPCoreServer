@@ -50,7 +50,7 @@ namespace SIPServer
             _serviceProvider = serviceProvider; 
 
             //_server = _serviceProvider.GetService<Server>();
-            _server = ActivatorUtilities.CreateInstance<Server>(_serviceProvider, AppendToLog, calls);
+            _server = ActivatorUtilities.CreateInstance<Server>(_serviceProvider, AppendToLog);
 
             _server.Start();
 

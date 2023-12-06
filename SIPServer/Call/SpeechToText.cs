@@ -2,57 +2,49 @@
 using Google.Cloud.Speech.V1;
 using Microsoft.Extensions.Configuration;
 using SIPServer.Models;
+using static Google.Cloud.Speech.V1.SpeechClient;
 
 namespace SIPServer.Call
 {
-    class SpeechToText
+    class SpeechToText : KHService
     {
-        private SpeechClient.StreamingRecognizeStream streamingCall;
+        private SpeechClient                _client;
+        private StreamingRecognizeStream    _streamingCall;
+        public readonly int                 SAMPLE_RATE;
 
-        private SIPCall _call;
-        private readonly IConfiguration _configuration;
-        
-        private CancellationTokenSource cancellationTokenSource;
-
-        public SpeechToText(IConfiguration configuration, SIPCall call)
+        public SpeechToText(IConfiguration configuration, SIPCall call) : base(configuration, call)
         {
-            _call = call;
-            _configuration = configuration;
-            
-            cancellationTokenSource = new CancellationTokenSource();
-
-            // Initialize asynchronously
-            Task.Run(() => Initialize());
+            if (!int.TryParse(_configuration["sttSampleRate"], out SAMPLE_RATE))
+                SAMPLE_RATE = 8000;
         }
 
-        private async Task Initialize()
+        public override async Task Initialization()
+
         {
             // Create the Speech client
-            SpeechClient client = SpeechClient.Create();
-            streamingCall = client.StreamingRecognize();
+            _client = SpeechClient.Create();
+            _streamingCall = _client.StreamingRecognize();
             // The response stream
-            var responseStream = streamingCall.GetResponseStream();
+            var responseStream = _streamingCall.GetResponseStream();
 
             var streamingConfig = new StreamingRecognitionConfig
             {
                 Config = new RecognitionConfig
                 {
                     Encoding = RecognitionConfig.Types.AudioEncoding.Linear16,
-                    //Encoding = RecognitionConfig.Types.AudioEncoding.Linear16,
-                    SampleRateHertz = 8000,
+                    SampleRateHertz = SAMPLE_RATE,
                     LanguageCode = LanguageCodes.Arabic.Egypt,
                 },
-                InterimResults = true,
+                InterimResults = false,
             };
 
-            await streamingCall.WriteAsync(new StreamingRecognizeRequest
+            await _streamingCall.WriteAsync(new StreamingRecognizeRequest
             {
                 StreamingConfig = streamingConfig
             });
 
             // Start tasks
             _ = Transcript(responseStream);
-            _ = InfiniteStreamingRecognize(streamingCall);
         }
 
         private async Task Transcript(AsyncResponseStream<StreamingRecognizeResponse> responseStream)
@@ -90,17 +82,17 @@ namespace SIPServer.Call
             }
         }
 
-        public async Task InfiniteStreamingRecognize(SpeechClient.StreamingRecognizeStream streamingCall)
+        public override void main()
         {
             try
             {
-                while (!cancellationTokenSource.IsCancellationRequested)
+                while (!_cancellationTokenSource.IsCancellationRequested)
                 {
                     byte[] buffer = _call.CallAudio.Take(); 
 
                     if (buffer.Length > 0)
                     {
-                        await streamingCall.WriteAsync(new StreamingRecognizeRequest
+                        _streamingCall.WriteAsync(new StreamingRecognizeRequest
                         {
                             AudioContent = Google.Protobuf.ByteString.CopyFrom(buffer)
                         });
@@ -113,13 +105,9 @@ namespace SIPServer.Call
             }
             finally
             {
-                await streamingCall.WriteCompleteAsync();
+                _streamingCall.WriteCompleteAsync();
             }
         }
 
-        public void Stop()
-        {
-            cancellationTokenSource.Cancel();
-        }
     }
 }

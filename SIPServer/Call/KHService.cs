@@ -10,28 +10,40 @@ namespace SIPServer.Call
 {
     internal abstract  class KHService
     {
-        protected SIPCall _call;
-        protected readonly IConfiguration _configuration;
-        protected CancellationTokenSource cancellationTokenSource;
+        protected SIPCall                   _call;
+        protected readonly IConfiguration   _configuration;
+        protected CancellationTokenSource   _cancellationTokenSource;
 
         public KHService(IConfiguration configuration, SIPCall call)
         {
             _call = call;
             _configuration = configuration;
-            
-            cancellationTokenSource = new CancellationTokenSource();
+
+            _cancellationTokenSource = new CancellationTokenSource();
         }
 
         public abstract void main();
 
-        public void Start()
+        public virtual async Task Initialization() 
+        { 
+        }
+
+        public virtual void Finalization()
         {
+        }
+
+        public async void Start()
+        {
+            await Initialization();
+
             Task.Run(() => main());
         }
 
         public void Stop()
         {
-            cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Cancel();
+
+            Finalization();
         }
 
     }

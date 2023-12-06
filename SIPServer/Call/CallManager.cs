@@ -1,12 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using MongoDB.Driver.Core.Servers;
 using SIPServer.Models;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorceryMedia.Abstractions;
-using System.Configuration;
-using System.IO;
 using System.Net;
 
 namespace SIPServer.Call
@@ -19,9 +16,11 @@ namespace SIPServer.Call
         private readonly MicAudio       _micAudio;
 
 
-        private SIPCall                 _call;
-        private readonly IConfiguration _configuration;
-        private readonly IServiceProvider _serviceProvider;
+        private SIPCall                     _call;
+        private readonly IConfiguration     _configuration;
+        private readonly IServiceProvider   _serviceProvider;
+
+        private readonly bool               USE_MIC;
 
         private const string WELCOME_8K = "G:\\src\\console\\sipsorcery\\examples\\SIPExamples\\PlaySounds\\Sounds\\hellowelcome8k.raw";
         private const string GOODBYE_16K = "G:\\src\\console\\sipsorcery\\examples\\SIPExamples\\PlaySounds\\Sounds\\goodbye16k.raw";
@@ -35,11 +34,20 @@ namespace SIPServer.Call
             _configuration = configuration;
             _serviceProvider = serviceProvider;
 
-            //MicAudio        = new MicAudio(Call, AppendToLog);
-            _STT = new SpeechToText(_configuration, _call);
-            _chatbot = ActivatorUtilities.CreateInstance<Chatbot>(_serviceProvider, _call);
-            _TTS = ActivatorUtilities.CreateInstance<TextToSpeech>(_serviceProvider, _call);
+            if (!bool.TryParse(_configuration["useMic"], out USE_MIC))
+                USE_MIC = false;
 
+            if(USE_MIC)
+                _micAudio   = ActivatorUtilities.CreateInstance<MicAudio>(_serviceProvider, _call);
+            
+            _STT        = ActivatorUtilities.CreateInstance<SpeechToText>(_serviceProvider, _call);
+            _chatbot    = ActivatorUtilities.CreateInstance<Chatbot>(_serviceProvider, _call);
+            _TTS        = ActivatorUtilities.CreateInstance<TextToSpeech>(_serviceProvider, _call);
+
+            if (USE_MIC)
+                _micAudio.Start();
+
+            _STT.Start();
             _chatbot.Start();
             _TTS.Start();
         }
@@ -48,20 +56,20 @@ namespace SIPServer.Call
         {
             _call.RtpSession = CreateRtpSession();
 
+
             await _call.UA.Answer(_call.UAS, _call.RtpSession);
 
-            if (_call.UA.IsCallActive)
-            {
+            if (!_call.UA.IsCallActive)
+                return false;
+            
+            await _call.RtpSession.Start();
 
-                await _call.RtpSession.Start();
-                //await _call.RtpSession.AudioExtrasSource.StartAudio();
-                //AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
-                //_call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
-
-                //await _call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(GOODBYE_16K, FileMode.Open), AudioSamplingRatesEnum.Rate16KHz);
-
-                //await _call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(WELCOME_8K, FileMode.Open), AudioSamplingRatesEnum.Rate8KHz);
-            }
+            //await _call.RtpSession.AudioExtrasSource.StartAudio();
+            //AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
+            //_call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
+            //await _call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(GOODBYE_16K, FileMode.Open), AudioSamplingRatesEnum.Rate16KHz);
+            //await _call.RtpSession.AudioExtrasSource.SendAudioFromStream(new FileStream(WELCOME_8K, FileMode.Open), AudioSamplingRatesEnum.Rate8KHz);
+            
 
             return true;
         }
@@ -148,12 +156,14 @@ namespace SIPServer.Call
             _call.UA.Hangup();
             _call.RtpSession.Close("");
 
+            if(USE_MIC)
+                _micAudio.Stop();
+
             _STT.Stop();
             _chatbot.Stop();
             _TTS.Stop();
 
             _call.Log($"Call ended.");
-
         }
     }
 }

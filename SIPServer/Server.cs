@@ -6,37 +6,38 @@ using SIPServer.Models;
 using SIPServer.Call;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.ObjectModel;
-using System.Windows.Input;
 
 namespace SIPServer
 {
     class Server
     {
-        private int SIP_LISTEN_PORT;
-        private SIPTransport SipTransport;
+        private readonly int    SIP_LISTEN_PORT;
+        private readonly bool   USE_MIC;
+        private SIPTransport    SipTransport;
 
 
         private ConcurrentDictionary<string, SIPRegisterAccount>    Registrations;
         private ConcurrentDictionary<string, SIPCall>               AcceptedCalls;
-        private ConcurrentDictionary<string, CallManager>               ActiveCalls;
+        private ConcurrentDictionary<string, CallManager>           ActiveCalls;
 
-        private readonly IConfiguration _configuration;
-        private readonly IServiceProvider _serviceProvider;
-        string callId;
-        private readonly Action<string> _appendToLog;
-        private ObservableCollection<string> _items;
+        private readonly IConfiguration     _configuration;
+        private readonly IServiceProvider   _serviceProvider;
 
-        public Server(IConfiguration configuration, IServiceProvider serviceProvider, Action<string> AppendToLog, ObservableCollection<string> Items)
+        private readonly Action<string>     _appendToLog;
+
+
+        public Server(IConfiguration configuration, IServiceProvider serviceProvider, Action<string> AppendToLog)
         {
-            _configuration = configuration;
-            _serviceProvider = serviceProvider;
-            _appendToLog = AppendToLog;
-            _items = Items;
+            _configuration      = configuration;
+            _serviceProvider    = serviceProvider;
+            _appendToLog        = AppendToLog;
 
             if (!int.TryParse(_configuration["port"], out SIP_LISTEN_PORT))
                 SIP_LISTEN_PORT = 5060; // default value
-            
+
+            if (!bool.TryParse(_configuration["useMic"], out USE_MIC))
+                USE_MIC = false;
+
             Registrations   = new ConcurrentDictionary<string, SIPRegisterAccount>();
             AcceptedCalls   = new ConcurrentDictionary<string, SIPCall>();
             ActiveCalls     = new ConcurrentDictionary<string, CallManager>();
@@ -83,12 +84,14 @@ namespace SIPServer
 
             CallManager CallManager = ActivatorUtilities.CreateInstance<CallManager>(_serviceProvider, call);
 
+
+            if (USE_MIC)
+                return;
+
             ret = await CallManager.AnswerAsync();
 
             if (!ret)
                 call.Log($"Call Not Answerd: from {call.User}");
-
-            callId = call.UA.Dialogue.CallId;
 
             ActiveCalls.TryAdd(call.UA.Dialogue.CallId, CallManager);
            

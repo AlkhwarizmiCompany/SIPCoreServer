@@ -39,9 +39,11 @@ namespace SIPServer
             // Register other services
             // services.AddTransient<IMyService, MyService>();
             services.AddTransient<CallManager>();
-            services.AddTransient<Server>();
+            services.AddTransient<SpeechToText>();
             services.AddTransient<Chatbot>();
             services.AddTransient<TextToSpeech>();
+
+            services.AddSingleton<Server>();
             services.AddSingleton<MainWindow>();
 
         }

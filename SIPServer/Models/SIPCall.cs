@@ -1,5 +1,4 @@
-﻿using NAudio.Wave;
-using SIPSorcery.Media;
+﻿using SIPSorcery.Media;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;

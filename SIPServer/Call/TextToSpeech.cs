@@ -5,6 +5,8 @@ using System.IO;
 using SIPServer.Models;
 using SIPSorceryMedia.Abstractions;
 using Microsoft.Extensions.Configuration;
+using System.Text;
+using System.Security.Cryptography;
 
 namespace SIPServer.Call
 {
@@ -16,14 +18,18 @@ namespace SIPServer.Call
         private VoiceSelectionParams    _voice;
         private AudioConfig             _audioConfig;
 
+        public readonly string          CACHE_PATH;
+        public readonly int             SAMPLE_RATE;
+
         public TextToSpeech(IConfiguration configuration, SIPCall call) : base(configuration, call)
         {
+            CACHE_PATH = configuration["cachePath"] != null ? _configuration["cachePath"] : Path.Combine(Directory.GetCurrentDirectory(),"TTS");
 
-            Initialization();
+            if(!int.TryParse(_configuration["ttsSampleRate"], out SAMPLE_RATE))
+                SAMPLE_RATE =  16000;
         }
 
-
-        public void Initialization()
+        public override async Task Initialization()
         {
             _TTSClient = TextToSpeechClient.Create();
 
@@ -36,9 +42,14 @@ namespace SIPServer.Call
             _audioConfig = new AudioConfig
             {
                 AudioEncoding = Google.Cloud.TextToSpeech.V1.AudioEncoding.Linear16,
-                SampleRateHertz= 16000
+                SampleRateHertz = SAMPLE_RATE
             };
 
+
+            if (!Directory.Exists(CACHE_PATH))
+            {
+                Directory.CreateDirectory(CACHE_PATH);
+            }
         }
 
         private void PlayByteArrayToSpeaker(byte[] byteArray)
@@ -64,15 +75,25 @@ namespace SIPServer.Call
 
         }
 
+        private static string ComputeHash(string input)
+        {
+            using (SHA256 sha256Hash = SHA256.Create())
+            {
+                byte[] data = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(input));
+                StringBuilder sBuilder = new StringBuilder();
+                for (int i = 0; i < data.Length; i++)
+                {
+                    sBuilder.Append(data[i].ToString("x2"));
+                }
+                return sBuilder.ToString();
+            }
+        }
+
         private void PlayByteArray(byte[] byteArray)
         {
             //PlayByteArrayToSpeaker(byteArray);
 
-            //AudioFormat audioFormat = new AudioFormat(AudioCodecsEnum.PCMA, 1);
-
-
             MemoryStream memoryStream = new MemoryStream(byteArray);
-            //_call.RtpSession.AudioExtrasSource.SetAudioSourceFormat(audioFormat);
             _call.RtpSession.AudioExtrasSource.SendAudioFromStream(memoryStream, AudioSamplingRatesEnum.Rate16KHz);
 
             _call.IsRunning = false;
@@ -80,61 +101,34 @@ namespace SIPServer.Call
 
         public override void main()
         {
-            while (!cancellationTokenSource.IsCancellationRequested)
+            while (!_cancellationTokenSource.IsCancellationRequested)
             {
                 string ChatbotResponse = _call.ChatbotAnswers.Take(); // Blocking call
-
                 if (string.IsNullOrEmpty(ChatbotResponse))
                     continue;
 
-                SynthesisInput input = new SynthesisInput
+                string hash = ComputeHash(ChatbotResponse);
+
+                string cachedFilePath = Path.Combine("E:\\repos", hash + ".wav");
+
+                byte[] audioBytes;
+
+                if (File.Exists(cachedFilePath))
                 {
-                    Text = ChatbotResponse
-                };
-                // hash ChatbotResponse
-                // check cache 
+                    audioBytes = File.ReadAllBytes(cachedFilePath);
+                }
+                else
+                {
+                    SynthesisInput input = new SynthesisInput { Text = ChatbotResponse };
 
-                //if(cache miss):
-                // google tts
-                //if(chach hit)
-                //retrive from disk
+                    var response = _TTSClient.SynthesizeSpeech(input, _voice, _audioConfig);
 
-                var response = _TTSClient.SynthesizeSpeech(input, _voice, _audioConfig);
+                    audioBytes = response.AudioContent.ToByteArray();
 
-                string encodedAudioContent = response.AudioContent.ToBase64(); // Your base64-encoded audio content
-                byte[] audioBytes = Convert.FromBase64String(encodedAudioContent);
+                    File.WriteAllBytes(cachedFilePath, audioBytes);
+                }
 
-                //var audioContent = response.AudioContent.ToString();
-                //byte[] audioBytes = Convert.FromBase64String(audioContent);
-
-                //// Assuming the audio is in WAV format
-                //using (MemoryStream mp3Stream = new MemoryStream(audioBytes))
-                //{
-                //    using (WaveStream waveStream = new WaveFileReader(mp3Stream))
-                //    {
-                //        // Convert to PCM format
-                //        WaveFormat pcmFormat = new WaveFormat(waveStream.WaveFormat.SampleRate, 16, waveStream.WaveFormat.Channels);
-                //        using (WaveStream pcmStream = new WaveFormatConversionStream(pcmFormat, waveStream))
-                //        {
-                //            // Write the PCM data to a file
-                //            string outputFile = "output.raw";
-                //            using (FileStream fileStream = new FileStream(outputFile, FileMode.Create))
-                //            {
-                //                pcmStream.CopyTo(fileStream);
-                //            }
-                //        }
-                //    }
-                //}
-
-                //PlayByteArray(response.AudioContent.ToByteArray());
                 PlayByteArray(audioBytes);
-
-                ////_call.ResponseAudio.Add(response.AudioContent.)
-                //using (Stream output = File.Create("G:\\src\\SIP\\SIPServer\\SIPServer\\Assets\\audio\\output1.mp3"))
-                //{
-                //    response.AudioContent.WriteTo(output);
-                //    AppendToLog("Audio content written to file \"output.mp3\"");
-                //}
             }
         }
 
