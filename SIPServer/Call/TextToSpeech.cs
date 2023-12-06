@@ -109,7 +109,7 @@ namespace SIPServer.Call
 
                 string hash = ComputeHash(ChatbotResponse);
 
-                string cachedFilePath = Path.Combine("E:\\repos", hash + ".wav");
+                string cachedFilePath = Path.Combine(CACHE_PATH, hash + ".wav");
 
                 byte[] audioBytes;
 
