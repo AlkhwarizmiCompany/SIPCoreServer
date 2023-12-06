@@ -16,6 +16,8 @@ namespace SIPServer.Call
         {
 
             // Configure microphone input
+            _call.Log($"Configure microphone input");
+
             waveIn = new WaveInEvent
             {
                 WaveFormat = new WaveFormat(8000, 1) // Sample rate and channels
@@ -31,7 +33,9 @@ namespace SIPServer.Call
 
         public override void main()
         {
+
             waveIn.StartRecording();
+            _call.Log($"Start Recording In Mic");
 
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
@@ -39,6 +43,8 @@ namespace SIPServer.Call
             }
 
             waveIn.StopRecording();
+            _call.Log($"Stop Recording In Mic");
+
         }
 
     }

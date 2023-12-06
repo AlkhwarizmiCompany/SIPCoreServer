@@ -3,6 +3,7 @@ using Google.Cloud.Speech.V1;
 using Microsoft.Extensions.Configuration;
 using SIPServer.Models;
 using static Google.Cloud.Speech.V1.SpeechClient;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace SIPServer.Call
 {
@@ -21,8 +22,8 @@ namespace SIPServer.Call
         public override async Task Initialization()
 
         {
-            // Create the Speech client
             _client = SpeechClient.Create();
+            _call.Log("Create the Speech client");
             _streamingCall = _client.StreamingRecognize();
             // The response stream
             var responseStream = _streamingCall.GetResponseStream();
@@ -37,6 +38,10 @@ namespace SIPServer.Call
                 },
                 InterimResults = false,
             };
+
+            _call.Log("Streaming Encoding Codecs => Linear16");
+            _call.Log($"Streaming Sample Rate => ${SAMPLE_RATE}");
+            _call.Log($"Streaming LanguageCode => ${LanguageCodes.Arabic.Egypt}");
 
             await _streamingCall.WriteAsync(new StreamingRecognizeRequest
             {
@@ -105,7 +110,9 @@ namespace SIPServer.Call
             }
             finally
             {
+                _call.Log("Streaming Completed");
                 _streamingCall.WriteCompleteAsync();
+
             }
         }
 

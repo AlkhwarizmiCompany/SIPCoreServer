@@ -119,6 +119,7 @@ namespace SIPServer
             }
 
             CallManager.Stop();
+
         }
 
 

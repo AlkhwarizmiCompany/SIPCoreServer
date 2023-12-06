@@ -116,14 +116,18 @@ namespace SIPServer.Call
                 if (File.Exists(cachedFilePath))
                 {
                     audioBytes = File.ReadAllBytes(cachedFilePath);
+                    _call.Log($"{ChatbotResponse} is existing in cache");
                 }
                 else
                 {
                     SynthesisInput input = new SynthesisInput { Text = ChatbotResponse };
 
+
                     var response = _TTSClient.SynthesizeSpeech(input, _voice, _audioConfig);
 
                     audioBytes = response.AudioContent.ToByteArray();
+
+                    _call.Log($"Send ChatbotResponse text to google");
 
                     File.WriteAllBytes(cachedFilePath, audioBytes);
                 }

@@ -36,6 +36,8 @@ namespace SIPServer.Call
             BOT_ID = _configuration["BotId"] != null ? _configuration["BotId"]: "171";
             USER_ID = _configuration["UserId"] != null ? _configuration["UserId"] : "VoiceBot";
 
+            _call.Log($"Chatbot Data API : {API}, BOT_ID:{BOT_ID}, USER_ID:{USER_ID}");
+
         }
 
         public string Ask(string input)
@@ -52,9 +54,15 @@ namespace SIPServer.Call
                 );
 
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                var response = _httpClient.PostAsync($"{API}/Ask", content).GetAwaiter().GetResult(); ;
+                var response = _httpClient.PostAsync($"{API}/Ask", content).GetAwaiter().GetResult();
+                
+                _call.Log($"Chatbot response => $ {response}");
+
                 if (!response.IsSuccessStatusCode)
+                {
+                    _call.Log($"عذرا حدث خطأ فى الاتصال");
                     return "عذرا حدث خطأ فى الاتصال";
+                }
 
                 string responseString = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 return responseString;
